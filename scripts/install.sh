@@ -14,7 +14,7 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 log_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
-log_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
+log_ok() { echo -e "${GREEN}[OK]${NC} $1"; }
 log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
 
@@ -29,6 +29,7 @@ if [ "$(uname -s)" != "Linux" ]; then
 fi
 
 # 3. CPU Architecture Detection
+log_info "Detecting architecture..."
 ARCH="$(uname -m)"
 case "${ARCH}" in
     x86_64|amd64)
@@ -41,59 +42,89 @@ case "${ARCH}" in
         log_error "Unsupported CPU architecture: ${ARCH}. LITEPLOY supports amd64 and arm64."
         ;;
 esac
-
-log_info "Detected Architecture: linux-${BINARY_ARCH}"
+log_ok "linux-${BINARY_ARCH} detected"
 
 # 4. Dependency Checks
 command -v curl >/dev/null 2>&1 || log_error "curl is required but not installed."
 
-# Verify Docker
+log_info "Detecting Docker..."
 if ! command -v docker >/dev/null 2>&1; then
-    log_warn "Docker Engine is not installed or not in PATH."
-    log_warn "Installing Docker is recommended before continuing."
-    log_info "You can install Docker via: curl -fsSL https://get.docker.com | sh"
+    log_warn "Docker Engine is not installed."
+    log_info "Installing Docker..."
+    curl -fsSL https://get.docker.com | sh >/dev/null 2>&1 || log_error "Failed to install Docker automatically."
+    log_ok "Docker installed"
 else
-    log_info "Docker detected: $(docker --version)"
+    log_ok "Docker detected"
 fi
 
 # 5. Download Binary
 REPO="nuexn0x-9/liteploy"
 DOWNLOAD_URL="https://github.com/${REPO}/releases/latest/download/liteploy-linux-${BINARY_ARCH}"
 
-# Fallback URL if downloading main branch raw compiled binary during initial setup
-RAW_FALLBACK_URL="https://raw.githubusercontent.com/${REPO}/main/bin/liteploy-linux-${BINARY_ARCH}"
-
 TARGET_BIN="/usr/local/bin/liteploy"
 TMP_BIN="/tmp/liteploy_download_${BINARY_ARCH}"
 
-log_info "Downloading LITEPLOY binary for linux-${BINARY_ARCH}..."
+log_info "Installing Liteploy..."
 
-if curl -fsSL "${DOWNLOAD_URL}" -o "${TMP_BIN}" 2>/dev/null; then
-    log_info "Downloaded release binary from GitHub Releases."
-elif curl -fsSL "${RAW_FALLBACK_URL}" -o "${TMP_BIN}" 2>/dev/null; then
-    log_info "Downloaded binary from main repository fallback."
-else
-    log_error "Failed to download LITEPLOY binary from ${DOWNLOAD_URL}. Please check internet connection or repository status."
+# Try downloading from GitHub Releases
+DOWNLOAD_SUCCESS=false
+if curl -sL -w "%{http_code}" "${DOWNLOAD_URL}" -o "${TMP_BIN}" | grep -q '200'; then
+    # Check if file size is > 5MB to ensure it's not a tiny XML error page
+    FILESIZE=$(stat -c%s "${TMP_BIN}" 2>/dev/null || stat -f%z "${TMP_BIN}" 2>/dev/null || echo 0)
+    if [ "$FILESIZE" -gt 5000000 ]; then
+        DOWNLOAD_SUCCESS=true
+    fi
+fi
+
+if [ "$DOWNLOAD_SUCCESS" = false ]; then
+    log_warn "GitHub Release not found or download failed."
+    log_info "Falling back to source build..."
+    
+    # Check if git is installed
+    if ! command -v git >/dev/null 2>&1; then
+        apt-get update -yqq && apt-get install -y git >/dev/null 2>&1 || log_error "Git is required for fallback build. Please install git."
+    fi
+    
+    # Check if Go is installed
+    if ! command -v go >/dev/null 2>&1; then
+        log_info "Installing Go compiler temporarily..."
+        GO_VERSION="1.22.1"
+        curl -sL "https://go.dev/dl/go${GO_VERSION}.linux-${BINARY_ARCH}.tar.gz" -o /tmp/go.tar.gz
+        rm -rf /usr/local/go && tar -C /usr/local -xzf /tmp/go.tar.gz
+        export PATH=$PATH:/usr/local/go/bin
+    fi
+    
+    # Clone and build
+    rm -rf /tmp/liteploy-source
+    git clone --depth 1 "https://github.com/${REPO}.git" /tmp/liteploy-source >/dev/null 2>&1 || log_error "Failed to clone repository."
+    cd /tmp/liteploy-source
+    
+    VERSION=$(git rev-parse --short HEAD)
+    LDFLAGS="-s -w -X github.com/liteploy/liteploy/internal/system.Version=source-fallback -X github.com/liteploy/liteploy/internal/system.CommitSHA=${VERSION}"
+    
+    log_info "Compiling binary from source..."
+    GOOS=linux GOARCH=${BINARY_ARCH} go build -ldflags "${LDFLAGS}" -o "${TMP_BIN}" ./cmd/liteploy || log_error "Source compilation failed."
+    cd - >/dev/null
+    rm -rf /tmp/liteploy-source
 fi
 
 chmod +x "${TMP_BIN}"
 mv -f "${TMP_BIN}" "${TARGET_BIN}"
-log_success "Installed binary to ${TARGET_BIN}"
+log_ok "Binary installed"
 
 # 6. Create Data Directory
 DATA_DIR="/var/lib/liteploy/data"
 mkdir -p "${DATA_DIR}"
 chmod 755 /var/lib/liteploy
-log_info "Created data directory: ${DATA_DIR}"
 
 # 7. Systemd Service Setup
 SERVICE_FILE="/etc/systemd/system/liteploy.service"
 
 if command -v systemctl >/dev/null 2>&1; then
-    log_info "Configuring Systemd service..."
+    log_info "Starting service..."
     cat <<EOF > "${SERVICE_FILE}"
 [Unit]
-Description=LITEPLOY — Lightweight Docker Deployment Platform
+Description=LITEPLOY - Lightweight Docker Deployment Platform
 After=network.target docker.service
 Requires=docker.service
 Wants=caddy.service
@@ -121,9 +152,9 @@ WantedBy=multi-user.target
 EOF
 
     systemctl daemon-reload
-    systemctl enable liteploy.service
+    systemctl enable liteploy.service >/dev/null 2>&1
     systemctl restart liteploy.service
-    log_success "LITEPLOY Systemd service created and started!"
+    log_ok "Liteploy running"
 else
     log_warn "systemd not detected. Please run LITEPLOY manually using: ${TARGET_BIN}"
 fi
@@ -132,7 +163,7 @@ fi
 IP_ADDR="$(curl -s https://api.ipify.org 2>/dev/null || hostname -I | awk '{print $1}')"
 
 echo -e "\n=================================================="
-echo -e "${GREEN}🎉 LITEPLOY Installation Complete!${NC}"
+echo -e "${GREEN}🚀 LITEPLOY Installation Complete!${NC}"
 echo -e "=================================================="
 echo -e "Dashboard URL: ${BLUE}http://${IP_ADDR}:8080${NC}"
 echo -e "Data Storage:  ${DATA_DIR}"

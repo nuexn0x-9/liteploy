@@ -102,7 +102,7 @@ LITEPLOY is designed with strict resource constraints:
 Run the official one-command installer on a clean Linux VPS (requires root or `sudo` privileges):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/nuexn0x-9/liteploy/main/scripts/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/nuexn0x-9/liteploy/main/scripts/install.sh | bash
 ```
 
 The installer automatically:
@@ -154,7 +154,7 @@ Comprehensive documentation is available in the [`docs/`](docs/) directory:
 To update LITEPLOY to the latest version, re-run the installer script:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/nuexn0x-9/liteploy/main/scripts/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/nuexn0x-9/liteploy/main/scripts/install.sh | bash
 ```
 
 Or restart the Systemd service manually after replacing the binary:
