@@ -145,6 +145,8 @@ func (s *Server) buildRouter() http.Handler {
 	mux.HandleFunc("GET /settings", s.authenticated(s.handleSettingsPage))
 	mux.HandleFunc("POST /settings/password", s.authenticated(s.handleSettingsChangePassword))
 	mux.HandleFunc("POST /system/prune", s.authenticated(s.handleSystemPrune))
+	mux.HandleFunc("GET /settings/backup/export", s.authenticated(s.handleBackupExport))
+	mux.HandleFunc("POST /settings/backup/import", s.authenticated(s.handleBackupImport))
 	mux.HandleFunc("GET /applications/{id}/stats", s.authenticated(s.handleApplicationStats))
 	mux.HandleFunc("POST /applications/{id}/rollback/{depID}", s.authenticated(s.handleApplicationRollback))
 	mux.HandleFunc("POST /applications/{id}/deployments/clear-failed", s.authenticated(s.handleClearFailedDeployments))

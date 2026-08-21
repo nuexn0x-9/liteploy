@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/liteploy/liteploy/internal/application"
+	"github.com/liteploy/liteploy/internal/storage"
 )
 
 // --- HTML Application Handlers ---
@@ -537,4 +539,56 @@ func (s *Server) handleClearFailedDeployments(w http.ResponseWriter, r *http.Req
 	appID := r.PathValue("id")
 	s.depSvc.ClearFailedDeployments(appID)
 	http.Redirect(w, r, "/applications/"+appID, http.StatusFound)
+}
+
+func (s *Server) handleBackupExport(w http.ResponseWriter, r *http.Request) {
+	store, err := storage.New(s.cfg.DataDir)
+	if err != nil {
+		http.Error(w, "failed to initialize storage: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	filename := fmt.Sprintf("liteploy-backup-%s.tar.gz", time.Now().Format("2006-01-02-150405"))
+	w.Header().Set("Content-Type", "application/gzip")
+	w.Header().Set("Content-Disposition", "attachment; filename=\""+filename+"\"")
+
+	if err := store.ExportBackup(w); err != nil {
+		s.logger.Error("failed to export backup", "error", err)
+	}
+}
+
+func (s *Server) handleBackupImport(w http.ResponseWriter, r *http.Request) {
+	session := sessionFromContext(r.Context())
+	if !s.requireCSRF(w, r, session) {
+		return
+	}
+
+	// Limit upload size to 50MB
+	if err := r.ParseMultipartForm(50 << 20); err != nil {
+		http.Redirect(w, r, "/settings?error=invalid_upload", http.StatusFound)
+		return
+	}
+
+	file, _, err := r.FormFile("backup_file")
+	if err != nil {
+		http.Redirect(w, r, "/settings?error=no_file_uploaded", http.StatusFound)
+		return
+	}
+	defer file.Close()
+
+	store, err := storage.New(s.cfg.DataDir)
+	if err != nil {
+		http.Redirect(w, r, "/settings?error="+err.Error(), http.StatusFound)
+		return
+	}
+
+	if err := store.ImportBackup(file); err != nil {
+		http.Redirect(w, r, "/settings?error="+err.Error(), http.StatusFound)
+		return
+	}
+
+	// Reload applications into memory
+	_ = s.appSvc.Reload()
+
+	http.Redirect(w, r, "/settings?success=backup_restored", http.StatusFound)
 }

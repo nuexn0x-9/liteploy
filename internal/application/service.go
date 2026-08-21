@@ -230,7 +230,14 @@ func (s *Service) loadAll() error {
 	return nil
 }
 
-// GenerateID generates the next sequential Application ID (e.g., "app-001").
+// Reload re-reads all applications from storage into memory.
+func (s *Service) Reload() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.loadAll()
+}
+
+// GenerateID generates a new unique 3-digit application ID (e.g. "app-001").
 // It inspects existing IDs and increments from the highest.
 func (s *Service) GenerateID() string {
 	s.mu.RLock()

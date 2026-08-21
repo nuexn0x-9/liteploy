@@ -123,6 +123,35 @@
                 </div>
             </section>
 
+            <!-- Backup & Migration -->
+            <section class="card">
+                <div class="card-header">
+                    <h2><span class="card-icon">💾</span> BACKUP &amp; MIGRATION</h2>
+                </div>
+                <div style="padding: 1rem 0;">
+                    <p class="text-muted" style="margin-bottom: 1rem;">
+                        Export all application configurations, domain mappings, environment variables, and administrator accounts into a single portable <code>.tar.gz</code> archive to easily migrate to another VPS.
+                    </p>
+                    <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+                        <div>
+                            <strong style="font-family: var(--font-pixel); font-size: 0.42rem; display: block; margin-bottom: 0.5rem;">EXPORT BACKUP</strong>
+                            <a href="/settings/backup/export" class="btn btn-primary">[ DOWNLOAD BACKUP ARCHIVE (.tar.gz) ]</a>
+                        </div>
+                        <hr style="border: 0; border-top: 1px dashed var(--rp-surface2);">
+                        <div>
+                            <strong style="font-family: var(--font-pixel); font-size: 0.42rem; display: block; margin-bottom: 0.5rem;">IMPORT &amp; RESTORE BACKUP</strong>
+                            <form method="POST" action="/settings/backup/import" enctype="multipart/form-data" onsubmit="return confirm('WARNING: Restoring a backup will overwrite current applications and configurations. Continue?');">
+                                <input type="hidden" name="_csrf" value="{{if .Session}}{{.Session.CSRFToken}}{{end}}">
+                                <div style="display: flex; gap: 10px; align-items: center;">
+                                    <input type="file" name="backup_file" accept=".tar.gz,.tgz" required style="max-width: 300px;">
+                                    <button type="submit" class="btn btn-warning">[ RESTORE BACKUP ]</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
             <!-- System Tools -->
             <section class="card">
                 <div class="card-header">
@@ -134,7 +163,7 @@
                     </p>
                     <form method="POST" action="/system/prune" onsubmit="return confirm('Are you sure you want to run garbage collection? This will clear unused Docker data.');">
                         <input type="hidden" name="_csrf" value="{{if .Session}}{{.Session.CSRFToken}}{{end}}">
-                        <button type="submit" class="btn btn-warning">? RUN SYSTEM CLEANUP</button>
+                        <button type="submit" class="btn btn-warning">⚡ RUN SYSTEM CLEANUP</button>
                     </form>
                 </div>
             </section>
