@@ -83,19 +83,22 @@ TMP_BIN="/tmp/liteploy_download_${BINARY_ARCH}"
 log_info "Installing Liteploy binary..."
 
 DOWNLOAD_SUCCESS=false
-if curl -sL -w "%{http_code}" "${DOWNLOAD_URL}" -o "${TMP_BIN}" | grep -q '200'; then
+LATEST_REMOTE_COMMIT=$(git ls-remote "https://github.com/${REPO}.git" HEAD 2>/dev/null | awk '{print $1}' | cut -c1-7 || echo "")
+
+if [ "${FORCE_BUILD:-0}" != "1" ] && curl -sL -w "%{http_code}" "${DOWNLOAD_URL}" -o "${TMP_BIN}" | grep -q '200'; then
     # Check if file size is > 5MB to ensure it's not a tiny XML error page
     FILESIZE=$(stat -c%s "${TMP_BIN}" 2>/dev/null || stat -f%z "${TMP_BIN}" 2>/dev/null || echo 0)
     if [ "$FILESIZE" -gt 5000000 ]; then
         chmod +x "${TMP_BIN}" 2>/dev/null || true
-        # Verify downloaded binary version is current v1.0.0
-        BIN_VER=$("${TMP_BIN}" version 2>/dev/null || echo "v0.0.0")
-        if echo "${BIN_VER}" | grep -q "v1.0.0"; then
+        BIN_INFO=$("${TMP_BIN}" version 2>/dev/null || echo "")
+        
+        # If remote commit is known and binary doesn't have it, or binary is outdated, compile from source
+        if [ -n "${LATEST_REMOTE_COMMIT}" ] && ! echo "${BIN_INFO}" | grep -q "${LATEST_REMOTE_COMMIT}"; then
+            log_warn "GitHub Release binary is behind main (${BIN_INFO}). Latest commit is ${LATEST_REMOTE_COMMIT}."
+            log_info "Building latest code directly from GitHub main branch..."
+        elif echo "${BIN_INFO}" | grep -q "v1.0.0"; then
             DOWNLOAD_SUCCESS=true
-            log_ok "Downloaded latest ${BIN_VER}"
-        else
-            log_warn "GitHub Release binary is outdated (${BIN_VER})."
-            log_info "Building latest v1.0.0 directly from source repository..."
+            log_ok "Downloaded latest ${BIN_INFO}"
         fi
     fi
 fi
