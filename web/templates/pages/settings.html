@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SYS CONFIG — LITEPLOY</title>
+    <link rel="stylesheet" href="/static/css/app.css">
+    <script src="/static/js/htmx.min.js" defer></script>
+    <script src="/static/js/app.js" defer></script>
+</head>
+<body class="app-layout">
+    <div class="mobile-topbar">
+        <a href="/" class="logo">LITEPLOY</a>
+        <button class="sidebar-toggle" onclick="document.querySelector('.sidebar').classList.toggle('open')" aria-label="Toggle navigation">☰</button>
+    </div>
+    <nav class="sidebar" role="navigation" aria-label="Main navigation">
+        <div class="sidebar-header">
+            <a href="/" class="logo">LITEPLOY<span class="logo-tagline">> DEPLOYMENT CONSOLE</span></a>
+            <div class="version-tag">v0.1.0</div>
+        </div>
+        <ul class="nav-links">
+            <li><a href="/" class="nav-link"><span class="nav-icon">◈</span> CONTROL ROOM</a></li>
+            <li><a href="/applications" class="nav-link"><span class="nav-icon">▣</span> APPLICATIONS</a></li>
+            <li><a href="/deployments" class="nav-link"><span class="nav-icon">▲</span> DEPLOYMENTS</a></li>
+            <li><a href="/domains" class="nav-link"><span class="nav-icon">◉</span> NETWORK</a></li>
+            <li><a href="/settings" class="nav-link active" aria-current="page"><span class="nav-icon">✦</span> SYS CONFIG</a></li>
+        </ul>
+        <div class="sidebar-footer">
+            {{if .Session}}
+            <span class="user-badge">{{.Session.Username}}</span>
+            <form method="POST" action="/logout">
+                <input type="hidden" name="_csrf" value="{{.Session.CSRFToken}}">
+                <button type="submit" class="btn-logout">[ LOGOUT ]</button>
+            </form>
+            {{end}}
+        </div>
+    </nav>
+    <main class="main-content" role="main">
+        <div class="page-header">
+            <div>
+                <h1>SYSTEM CONFIGURATION</h1>
+                <p class="subtitle">Platform settings and administrator security</p>
+            </div>
+        </div>
+
+        {{if .Error}}
+        <div class="alert alert-error">SYSTEM ERROR — {{.Error}}</div>
+        {{end}}
+
+        {{if .Success}}
+        <div class="alert alert-success">[ OK ] ACCESS CODE UPDATED SUCCESSFULLY.</div>
+        {{end}}
+
+        <div class="grid-2col">
+            <!-- Authentication / Password -->
+            <section class="card">
+                <div class="card-header">
+                    <h2><span class="card-icon">🔒</span> AUTHENTICATION</h2>
+                </div>
+                <form method="POST" action="/settings/password">
+                    <input type="hidden" name="_csrf" value="{{if .Session}}{{.Session.CSRFToken}}{{end}}">
+
+                    <div class="form-group">
+                        <label for="old_password">CURRENT ACCESS CODE</label>
+                        <input type="password" id="old_password" name="old_password" required autocomplete="current-password" placeholder="Current password">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="new_password">NEW ACCESS CODE</label>
+                        <input type="password" id="new_password" name="new_password" required minlength="8" autocomplete="new-password" placeholder="Min. 8 characters">
+                        <small>Minimum 8 characters.</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="confirm_password">CONFIRM NEW ACCESS CODE</label>
+                        <input type="password" id="confirm_password" name="confirm_password" required minlength="8" autocomplete="new-password" placeholder="Repeat new password">
+                    </div>
+
+                    <button type="submit" class="btn btn-primary">[ UPDATE ACCESS CODE ]</button>
+                </form>
+            </section>
+
+            <!-- System Info -->
+            <section class="card">
+                <div class="card-header">
+                    <h2><span class="card-icon">◈</span> SYSTEM INFO</h2>
+                </div>
+                <dl class="info-list">
+                    <dt>PLATFORM</dt>
+                    <dd><strong style="font-family:var(--font-pixel); font-size:0.42rem; color:var(--rp-primary)">LITEPLOY CORE</strong></dd>
+
+                    <dt>ENGINE</dt>
+                    <dd><span class="badge-neutral">SINGLE BINARY</span></dd>
+
+                    <dt>DATA DIR</dt>
+                    <dd><code>/var/lib/liteploy</code></dd>
+
+                    <dt>DATABASE</dt>
+                    <dd><span class="badge-neutral">ATOMIC FILESYSTEM</span></dd>
+
+                    <dt>PROXY</dt>
+                    <dd>Caddy Admin API <code>:2019</code></dd>
+
+                    <dt>RAM TARGET</dt>
+                    <dd><span class="text-success font-semibold">&lt; 50 MB IDLE</span></dd>
+                </dl>
+
+                <div style="margin-top: 1rem; padding-top: 0.75rem; border-top: 1px solid var(--rp-border-dim);">
+                    <div class="deploy-stages">
+                        <div class="deploy-stage done">
+                            <span class="stage-icon">✓</span> DOCKER ENGINE — CONNECTED
+                        </div>
+                        <div class="deploy-stage done">
+                            <span class="stage-icon">✓</span> CADDY PROXY — CONFIGURED
+                        </div>
+                        <div class="deploy-stage done">
+                            <span class="stage-icon">✓</span> FILESYSTEM STORAGE — ACTIVE
+                        </div>
+                        <div class="deploy-stage done">
+                            <span class="stage-icon">✓</span> AUTH &amp; CSRF — ENABLED
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- System Tools -->
+            <section class="card">
+                <div class="card-header">
+                    <h2><span class="card-icon">⚡</span> SYSTEM TOOLS</h2>
+                </div>
+                <div style="padding: 1rem 0;">
+                    <p class="text-muted" style="margin-bottom: 1rem;">
+                        Run Garbage Collection to free up disk space by removing all stopped containers, unused networks, dangling images, and build cache.
+                    </p>
+                    <form method="POST" action="/system/prune" onsubmit="return confirm('Are you sure you want to run garbage collection? This will clear unused Docker data.');">
+                        <input type="hidden" name="_csrf" value="{{if .Session}}{{.Session.CSRFToken}}{{end}}">
+                        <button type="submit" class="btn btn-warning">? RUN SYSTEM CLEANUP</button>
+                    </form>
+                </div>
+            </section>
+        </div>
+    </main>
+</body>
+</html>

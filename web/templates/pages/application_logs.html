@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SYSTEM LOG: {{.App.Name}} — LITEPLOY</title>
+    <link rel="stylesheet" href="/static/css/app.css">
+    <script src="/static/js/htmx.min.js" defer></script>
+    <script src="/static/js/htmx-sse.js" defer></script>
+    <script src="/static/js/app.js" defer></script>
+</head>
+<body class="app-layout">
+    <div class="mobile-topbar">
+        <a href="/" class="logo">LITEPLOY</a>
+        <button class="sidebar-toggle" onclick="document.querySelector('.sidebar').classList.toggle('open')" aria-label="Toggle navigation">☰</button>
+    </div>
+    <nav class="sidebar" role="navigation" aria-label="Main navigation">
+        <div class="sidebar-header">
+            <a href="/" class="logo">LITEPLOY<span class="logo-tagline">> DEPLOYMENT CONSOLE</span></a>
+            <div class="version-tag">v0.1.0</div>
+        </div>
+        <ul class="nav-links">
+            <li><a href="/" class="nav-link"><span class="nav-icon">◈</span> CONTROL ROOM</a></li>
+            <li><a href="/applications" class="nav-link active"><span class="nav-icon">▣</span> APPLICATIONS</a></li>
+            <li><a href="/deployments" class="nav-link"><span class="nav-icon">▲</span> DEPLOYMENTS</a></li>
+            <li><a href="/domains" class="nav-link"><span class="nav-icon">◉</span> NETWORK</a></li>
+            <li><a href="/settings" class="nav-link"><span class="nav-icon">✦</span> SYS CONFIG</a></li>
+        </ul>
+        <div class="sidebar-footer"></div>
+    </nav>
+    <main class="main-content" role="main">
+        <div class="page-header">
+            <div>
+                <div class="breadcrumb">
+                    <a href="/applications">APPLICATIONS</a> / <a href="/applications/{{.App.ID}}">{{.App.Name}}</a> / LOG
+                </div>
+                <div class="title-with-status">
+                    <h1>SYSTEM LOG</h1>
+                    <span class="status-badge status-{{.App.Status}}">{{.App.Status}}</span>
+                </div>
+                <p class="subtitle" style="margin-top:0.2rem">Container runtime stdout/stderr — {{.App.Name}}</p>
+            </div>
+            <a href="/applications/{{.App.ID}}" class="btn btn-secondary">← BACK TO APP</a>
+        </div>
+
+        <section class="card">
+            <div class="log-header">
+                <span class="log-title">CONTAINER OUTPUT // STDOUT + STDERR</span>
+                <label class="autoscroll-label">
+                    <input type="checkbox" id="autoscroll" checked> AUTO-SCROLL
+                </label>
+            </div>
+            <div id="log-container" class="log-container"
+                {{if .App.ContainerID}}
+                hx-ext="sse"
+                sse-connect="/api/applications/{{.App.ID}}/logs/stream"
+                sse-swap="data"
+                hx-swap="beforeend"
+                {{end}}>
+                <pre id="log-output" class="log-output">{{if not .App.ContainerID}}> NO CONTAINER RUNNING FOR THIS APPLICATION.
+> DEPLOY THE APPLICATION FIRST TO VIEW RUNTIME LOGS.{{end}}</pre>
+            </div>
+        </section>
+    </main>
+</body>
+</html>

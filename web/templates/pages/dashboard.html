@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CONTROL ROOM — LITEPLOY</title>
+    <link rel="stylesheet" href="/static/css/app.css">
+    <script src="/static/js/htmx.min.js" defer></script>
+    <script src="/static/js/app.js" defer></script>
+</head>
+<body class="app-layout">
+    <!-- Mobile Top Bar -->
+    <div class="mobile-topbar">
+        <a href="/" class="logo">LITEPLOY</a>
+        <button class="sidebar-toggle" onclick="document.querySelector('.sidebar').classList.toggle('open')" aria-label="Toggle navigation">?</button>
+    </div>
+
+    <nav class="sidebar" role="navigation" aria-label="Main navigation">
+        <div class="sidebar-header">
+            <a href="/" class="logo">LITEPLOY
+                <span class="logo-tagline">> DEPLOYMENT CONSOLE</span>
+            </a>
+            <div class="version-tag">v0.1.0</div>
+        </div>
+        <ul class="nav-links">
+            <li><a href="/" class="nav-link active" aria-current="page"><span class="nav-icon">?</span> CONTROL ROOM</a></li>
+            <li><a href="/applications" class="nav-link"><span class="nav-icon">?</span> APPLICATIONS</a></li>
+            <li><a href="/deployments" class="nav-link"><span class="nav-icon">?</span> DEPLOYMENTS</a></li>
+            <li><a href="/domains" class="nav-link"><span class="nav-icon">?</span> NETWORK</a></li>
+            <li><a href="/settings" class="nav-link"><span class="nav-icon">?</span> SYS CONFIG</a></li>
+        </ul>
+        <div class="sidebar-footer">
+            {{if .Session}}
+            <span class="user-badge">{{.Session.Username}}</span>
+            <form method="POST" action="/logout">
+                <input type="hidden" name="_csrf" value="{{.Session.CSRFToken}}">
+                <button type="submit" class="btn-logout">[ LOGOUT ]</button>
+            </form>
+            {{end}}
+        </div>
+    </nav>
+
+    <main class="main-content" role="main">
+        <div class="page-header">
+            <div>
+                <h1>CONTROL ROOM</h1>
+                <p class="subtitle">System overview and workload status</p>
+            </div>
+            <a href="/applications/new" class="btn btn-primary">[ + NEW APPLICATION ]</a>
+        </div>
+
+        <!-- HUD Stats Row -->
+        <div class="stats-row">
+            <div class="stat-card">
+                <div class="stat-icon">?</div>
+                <div>
+                    <div class="stat-value">{{len .Apps}}</div>
+                    <div class="stat-label">APPLICATIONS</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">?</div>
+                <div>
+                    <div class="stat-value" style="color: var(--rp-success)">{{countRunning .Apps}}</div>
+                    <div class="stat-label">ONLINE</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">?</div>
+                <div>
+                    <div class="stat-value" style="font-size: 0.65rem">&lt; 50 MB</div>
+                    <div class="stat-label">ENGINE RAM</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Applications -->
+        <div class="section">
+            <div class="section-header">
+                <h2>MANAGED WORKLOADS</h2>
+                <a href="/applications" class="btn btn-sm btn-secondary">VIEW ALL ?</a>
+            </div>
+
+            {{if .Apps}}
+            <div class="app-grid">
+                {{range .Apps}}
+                <div class="app-card">
+                    <div class="app-card-top">
+                        <div>
+                            <a href="/applications/{{.ID}}" class="app-title-link">{{.Name}}</a>
+                            <div class="text-xs text-muted" style="margin-top:0.2rem; font-family: var(--font-mono)">ID: {{.ID}}</div>
+                        </div>
+                        <span class="status-badge status-{{.Status}}">{{.Status}}</span>
+                    </div>
+
+                    <div class="app-card-body">
+                        <div class="app-info-row">
+                            <span class="text-muted">SOURCE</span>
+                            <span class="badge-neutral">{{.Source.Type}}</span>
+                        </div>
+                        <div class="app-info-row">
+                            <span class="text-muted">PORT</span>
+                            <code>:{{.Port}}</code>
+                        </div>
+                        {{if .Domains}}
+                        <div class="app-info-row">
+                            <span class="text-muted">DOMAIN</span>
+                            <a href="http://{{index .Domains 0}}" target="_blank" rel="noopener noreferrer" class="domain-link">{{index .Domains 0}}</a>
+                        </div>
+                        {{end}}
+                    </div>
+
+                    <div class="app-card-actions">
+                        <a href="/applications/{{.ID}}" class="btn btn-sm btn-secondary">MANAGE</a>
+                        <div class="actions">
+                            <a href="/applications/{{.ID}}/logs" class="btn btn-sm btn-icon" title="Runtime Logs">LOG</a>
+                            <form method="POST" action="/applications/{{.ID}}/deploy" style="display:inline">
+                                <input type="hidden" name="_csrf" value="{{if $.Session}}{{$.Session.CSRFToken}}{{end}}">
+                                <button type="submit" class="btn btn-sm btn-primary">DEPLOY</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                {{end}}
+            </div>
+            {{else}}
+            <div class="empty-state">
+                <span class="empty-icon">?</span>
+                <h3>NO WORKLOADS INITIALIZED</h3>
+                <p>Deploy your first Docker workload, Git repository, or web service.</p>
+                <a href="/applications/new" class="btn btn-primary">[ + CREATE FIRST APPLICATION ]</a>
+            </div>
+            {{end}}
+        </div>
+    </main>
+</body>
+</html>

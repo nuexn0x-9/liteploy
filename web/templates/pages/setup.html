@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LITEPLOY // INITIAL SETUP</title>
+    <link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body class="auth-layout">
+    <div class="auth-card">
+        <div class="auth-header">
+            <span class="auth-logo">LITEPLOY</span>
+            <span class="auth-subtitle">INITIAL SYSTEM SETUP</span>
+            <div class="auth-status-line">FIRST BOOT DETECTED. CREATE ADMIN ACCOUNT.</div>
+        </div>
+
+        <div class="setup-info">Create your administrator credentials to initialize the deployment console.</div>
+
+        {{if .Error}}
+        <div class="alert alert-error">{{.Error}}</div>
+        {{end}}
+
+        <form method="POST" action="/setup" class="auth-form">
+            <div class="form-group">
+                <label for="username">ADMIN USERNAME</label>
+                <input type="text" id="username" name="username" required minlength="3" maxlength="64" autocomplete="username" placeholder="admin">
+            </div>
+            <div class="form-group">
+                <label for="password">ACCESS CODE</label>
+                <input type="password" id="password" name="password" required minlength="8" autocomplete="new-password" placeholder="Min. 8 characters">
+                <small>Minimum 8 characters</small>
+            </div>
+            <div class="form-group">
+                <label for="confirm_password">CONFIRM ACCESS CODE</label>
+                <input type="password" id="confirm_password" name="confirm_password" required minlength="8" autocomplete="new-password" placeholder="Repeat password">
+            </div>
+            <button type="submit" class="btn btn-primary btn-full">[ INITIALIZE SYSTEM ]</button>
+        </form>
+    </div>
+</body>
+</html>

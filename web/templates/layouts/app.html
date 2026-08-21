@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{block "title" .}}LITEPLOY{{end}}</title>
+    <link rel="stylesheet" href="/static/css/app.css">
+    <script src="/static/js/htmx.min.js" defer></script>
+    <script src="/static/js/app.js" defer></script>
+</head>
+<body class="app-layout">
+    <div class="mobile-topbar">
+        <a href="/" class="logo">LITEPLOY</a>
+        <button class="sidebar-toggle" onclick="document.querySelector('.sidebar').classList.toggle('open')" aria-label="Toggle navigation">☰</button>
+    </div>
+    <nav class="sidebar" role="navigation" aria-label="Main navigation">
+        <div class="sidebar-header">
+            <a href="/" class="logo">LITEPLOY<span class="logo-tagline">> DEPLOYMENT CONSOLE</span></a>
+            <div class="version-tag">v0.1.0</div>
+        </div>
+        <ul class="nav-links">
+            <li><a href="/" class="nav-link active"><span class="nav-icon">◈</span> CONTROL ROOM</a></li>
+            <li><a href="/applications" class="nav-link"><span class="nav-icon">▣</span> APPLICATIONS</a></li>
+            <li><a href="/deployments" class="nav-link"><span class="nav-icon">▲</span> DEPLOYMENTS</a></li>
+            <li><a href="/domains" class="nav-link"><span class="nav-icon">◉</span> NETWORK</a></li>
+            <li><a href="/settings" class="nav-link"><span class="nav-icon">✦</span> SYS CONFIG</a></li>
+        </ul>
+        <div class="sidebar-footer">
+            {{if .Session}}
+            <span class="user-badge">{{.Session.Username}}</span>
+            <form method="POST" action="/logout">
+                <input type="hidden" name="_csrf" value="{{.Session.CSRFToken}}">
+                <button type="submit" class="btn-logout">[ LOGOUT ]</button>
+            </form>
+            {{end}}
+        </div>
+    </nav>
+    <main class="main-content" role="main">
+        {{block "content" .}}{{end}}
+    </main>
+</body>
+</html>

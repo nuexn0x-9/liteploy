@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BUILD #{{.Deployment.ID}} — LITEPLOY</title>
+    <link rel="stylesheet" href="/static/css/app.css">
+    <script src="/static/js/htmx.min.js" defer></script>
+    <script src="/static/js/htmx-sse.js" defer></script>
+    <script src="/static/js/app.js" defer></script>
+</head>
+<body class="app-layout">
+    <div class="mobile-topbar">
+        <a href="/" class="logo">LITEPLOY</a>
+        <button class="sidebar-toggle" onclick="document.querySelector('.sidebar').classList.toggle('open')" aria-label="Toggle navigation">☰</button>
+    </div>
+    <nav class="sidebar" role="navigation" aria-label="Main navigation">
+        <div class="sidebar-header">
+            <a href="/" class="logo">LITEPLOY<span class="logo-tagline">> DEPLOYMENT CONSOLE</span></a>
+            <div class="version-tag">v0.1.0</div>
+        </div>
+        <ul class="nav-links">
+            <li><a href="/" class="nav-link"><span class="nav-icon">◈</span> CONTROL ROOM</a></li>
+            <li><a href="/applications" class="nav-link"><span class="nav-icon">▣</span> APPLICATIONS</a></li>
+            <li><a href="/deployments" class="nav-link active"><span class="nav-icon">▲</span> DEPLOYMENTS</a></li>
+            <li><a href="/domains" class="nav-link"><span class="nav-icon">◉</span> NETWORK</a></li>
+            <li><a href="/settings" class="nav-link"><span class="nav-icon">✦</span> SYS CONFIG</a></li>
+        </ul>
+        <div class="sidebar-footer"></div>
+    </nav>
+    <main class="main-content" role="main">
+        <div class="page-header">
+            <div>
+                <div class="breadcrumb">
+                    <a href="/deployments">DEPLOYMENTS</a> / <a href="/applications/{{.Deployment.AppID}}">{{.Deployment.AppID}}</a>
+                </div>
+                <div class="title-with-status">
+                    <h1>BUILD #{{.Deployment.ID}}</h1>
+                    <span id="dep-status" class="status-badge status-{{.Deployment.Status}}">{{.Deployment.Status}}</span>
+                </div>
+            </div>
+            <a href="/applications/{{.Deployment.AppID}}" class="btn btn-secondary">← BACK TO APP</a>
+        </div>
+
+        <!-- Deployment Details Card -->
+        <div class="card" style="margin-bottom:1.25rem">
+            <div class="card-header">
+                <h2><span class="card-icon">◈</span> BUILD DETAILS</h2>
+            </div>
+            <dl class="info-list">
+                <dt>APP ID</dt><dd><code>{{.Deployment.AppID}}</code></dd>
+                <dt>TRIGGER</dt><dd><span class="badge-neutral">{{.Deployment.TriggeredBy}}</span></dd>
+                <dt>COMMIT</dt><dd>{{if .Deployment.CommitSHA}}<code>{{slice .Deployment.CommitSHA 0 8}}</code>{{else}}&mdash;{{end}}</dd>
+                <dt>DURATION</dt><dd id="dep-duration">{{if .Deployment.Duration}}{{formatDuration .Deployment.Duration}}{{else}}&mdash;{{end}}</dd>
+                <dt>CREATED</dt><dd style="font-family:var(--font-mono)">{{formatTime .Deployment.CreatedAt}}</dd>
+            </dl>
+
+            {{if .Deployment.Error}}
+            <div class="alert alert-error" style="margin-top:1rem">
+                <strong>BUILD FAILED:</strong> {{.Deployment.Error}}
+            </div>
+            {{end}}
+
+            <!-- Deployment Stage Progress -->
+            <div class="deploy-stages" style="margin-top:1rem">
+                <div class="deploy-stage {{if or (eq .Deployment.Status "success") (eq .Deployment.Status "building") (eq .Deployment.Status "starting") (eq .Deployment.Status "health_check") (eq .Deployment.Status "routing")}}done{{else if eq .Deployment.Status "preparing"}}active{{else if eq .Deployment.Status "failed"}}error{{end}}">
+                    <span class="stage-icon">{{if or (eq .Deployment.Status "success") (eq .Deployment.Status "building") (eq .Deployment.Status "starting") (eq .Deployment.Status "health_check") (eq .Deployment.Status "routing")}}✓{{else if eq .Deployment.Status "preparing"}}▶{{else if eq .Deployment.Status "failed"}}✗{{else}}○{{end}}</span> SOURCE — REPOSITORY CLONE
+                </div>
+                <div class="deploy-stage {{if or (eq .Deployment.Status "success") (eq .Deployment.Status "starting") (eq .Deployment.Status "health_check") (eq .Deployment.Status "routing")}}done{{else if eq .Deployment.Status "building"}}active{{else if eq .Deployment.Status "failed"}}error{{end}}">
+                    <span class="stage-icon">{{if or (eq .Deployment.Status "success") (eq .Deployment.Status "starting") (eq .Deployment.Status "health_check") (eq .Deployment.Status "routing")}}✓{{else if eq .Deployment.Status "building"}}▶{{else if eq .Deployment.Status "failed"}}✗{{else}}○{{end}}</span> BUILD — DOCKER IMAGE
+                </div>
+                <div class="deploy-stage {{if or (eq .Deployment.Status "success") (eq .Deployment.Status "health_check") (eq .Deployment.Status "routing")}}done{{else if eq .Deployment.Status "starting"}}active{{else if eq .Deployment.Status "failed"}}error{{end}}">
+                    <span class="stage-icon">{{if or (eq .Deployment.Status "success") (eq .Deployment.Status "health_check") (eq .Deployment.Status "routing")}}✓{{else if eq .Deployment.Status "starting"}}▶{{else if eq .Deployment.Status "failed"}}✗{{else}}○{{end}}</span> DOCKER — CONTAINER START
+                </div>
+                <div class="deploy-stage {{if or (eq .Deployment.Status "success") (eq .Deployment.Status "routing")}}done{{else if eq .Deployment.Status "health_check"}}active{{else if eq .Deployment.Status "failed"}}error{{end}}">
+                    <span class="stage-icon">{{if or (eq .Deployment.Status "success") (eq .Deployment.Status "routing")}}✓{{else if eq .Deployment.Status "health_check"}}▶{{else if eq .Deployment.Status "failed"}}✗{{else}}○{{end}}</span> HEALTH — STATUS CHECK
+                </div>
+                <div class="deploy-stage {{if eq .Deployment.Status "success"}}done{{else if eq .Deployment.Status "routing"}}active{{else if eq .Deployment.Status "failed"}}error{{end}}">
+                    <span class="stage-icon">{{if eq .Deployment.Status "success"}}✓{{else if eq .Deployment.Status "routing"}}▶{{else if eq .Deployment.Status "failed"}}✗{{else}}○{{end}}</span> CADDY — ROUTE CONFIGURED
+                </div>
+            </div>
+        </div>
+
+        <!-- Build Log -->
+        <section class="card">
+            <div class="log-header">
+                <span class="log-title">BUILD LOG // SYSTEM OUTPUT</span>
+                <label class="autoscroll-label">
+                    <input type="checkbox" id="autoscroll" checked> AUTO-SCROLL
+                </label>
+            </div>
+            <div id="log-container" class="log-container"
+                {{if not .Deployment.Status.IsTerminal}}
+                hx-ext="sse"
+                sse-connect="/api/deployments/{{.Deployment.ID}}/events"
+                sse-swap="data"
+                hx-swap="beforeend"
+                {{end}}>
+                <pre id="log-output" class="log-output">{{/* existing logs loaded via JS */}}</pre>
+            </div>
+        </section>
+    </main>
+</body>
+</html>

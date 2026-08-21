@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DEPLOYMENTS — LITEPLOY</title>
+    <link rel="stylesheet" href="/static/css/app.css">
+    <script src="/static/js/htmx.min.js" defer></script>
+    <script src="/static/js/app.js" defer></script>
+</head>
+<body class="app-layout">
+    <div class="mobile-topbar">
+        <a href="/" class="logo">LITEPLOY</a>
+        <button class="sidebar-toggle" onclick="document.querySelector('.sidebar').classList.toggle('open')" aria-label="Toggle navigation">☰</button>
+    </div>
+    <nav class="sidebar" role="navigation" aria-label="Main navigation">
+        <div class="sidebar-header">
+            <a href="/" class="logo">LITEPLOY<span class="logo-tagline">> DEPLOYMENT CONSOLE</span></a>
+            <div class="version-tag">v0.1.0</div>
+        </div>
+        <ul class="nav-links">
+            <li><a href="/" class="nav-link"><span class="nav-icon">◈</span> CONTROL ROOM</a></li>
+            <li><a href="/applications" class="nav-link"><span class="nav-icon">▣</span> APPLICATIONS</a></li>
+            <li><a href="/deployments" class="nav-link active" aria-current="page"><span class="nav-icon">▲</span> DEPLOYMENTS</a></li>
+            <li><a href="/domains" class="nav-link"><span class="nav-icon">◉</span> NETWORK</a></li>
+            <li><a href="/settings" class="nav-link"><span class="nav-icon">✦</span> SYS CONFIG</a></li>
+        </ul>
+        <div class="sidebar-footer">
+            {{if .Session}}
+            <span class="user-badge">{{.Session.Username}}</span>
+            <form method="POST" action="/logout">
+                <input type="hidden" name="_csrf" value="{{.Session.CSRFToken}}">
+                <button type="submit" class="btn-logout">[ LOGOUT ]</button>
+            </form>
+            {{end}}
+        </div>
+    </nav>
+    <main class="main-content" role="main">
+        <div class="page-header">
+            <div>
+                <h1>DEPLOYMENTS</h1>
+                <p class="subtitle">Build &amp; deployment activity log across all applications</p>
+            </div>
+        </div>
+
+        {{if .Deployments}}
+        <div class="card table-card">
+            <table class="table" role="table">
+                <thead>
+                    <tr>
+                        <th>BUILD ID</th>
+                        <th>APPLICATION</th>
+                        <th>STATUS</th>
+                        <th>TRIGGER</th>
+                        <th>COMMIT</th>
+                        <th>DURATION</th>
+                        <th>TIMESTAMP</th>
+                        <th>LOG</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{range .Deployments}}
+                    <tr>
+                        <td>
+                            <a href="/deployments/{{.ID}}" class="code-link font-bold">#{{.ID}}</a>
+                        </td>
+                        <td>
+                            <a href="/applications/{{.AppID}}" class="app-link">
+                                {{index $.AppNames .AppID}} <span class="text-muted text-xs">({{.AppID}})</span>
+                            </a>
+                        </td>
+                        <td><span class="status-badge status-{{.Status}}">{{.Status}}</span></td>
+                        <td><span class="badge-neutral">{{.TriggeredBy}}</span></td>
+                        <td>
+                            {{if .CommitSHA}}
+                            <code class="commit-sha">{{slice .CommitSHA 0 7}}</code>
+                            {{else}}
+                            <span class="text-muted">—</span>
+                            {{end}}
+                        </td>
+                        <td>
+                            {{if .Duration}}
+                            {{formatDuration .Duration}}
+                            {{else if eq .Status "running" "building" "preparing" "starting" "health_check"}}
+                            <span class="pulse-text">IN PROGRESS...</span>
+                            {{else}}
+                            <span class="text-muted">—</span>
+                            {{end}}
+                        </td>
+                        <td>
+                            <span class="text-muted text-sm" style="font-family:var(--font-mono)">{{formatTime .CreatedAt}}</span>
+                        </td>
+                        <td>
+                            <a href="/deployments/{{.ID}}" class="btn btn-sm btn-secondary">VIEW LOG</a>
+                        </td>
+                    </tr>
+                    {{end}}
+                </tbody>
+            </table>
+        </div>
+        {{else}}
+        <div class="empty-state">
+            <span class="empty-icon">▲</span>
+            <h3>NO DEPLOYMENTS RECORDED</h3>
+            <p>Deploy an application to begin logging build and execution events here.</p>
+            <a href="/applications" class="btn btn-primary">[ GO TO APPLICATIONS ]</a>
+        </div>
+        {{end}}
+    </main>
+</body>
+</html>

@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.App.Name}} — LITEPLOY</title>
+    <link rel="stylesheet" href="/static/css/app.css">
+    <script src="/static/js/htmx.min.js" defer></script>
+    <script src="/static/js/app.js" defer></script>
+</head>
+<body class="app-layout">
+    <div class="mobile-topbar">
+        <a href="/" class="logo">LITEPLOY</a>
+        <button class="sidebar-toggle" onclick="document.querySelector('.sidebar').classList.toggle('open')" aria-label="Toggle navigation">☰</button>
+    </div>
+    <nav class="sidebar" role="navigation" aria-label="Main navigation">
+        <div class="sidebar-header">
+            <a href="/" class="logo">LITEPLOY<span class="logo-tagline">> DEPLOYMENT CONSOLE</span></a>
+            <div class="version-tag">v0.1.0</div>
+        </div>
+        <ul class="nav-links">
+            <li><a href="/" class="nav-link"><span class="nav-icon">◈</span> CONTROL ROOM</a></li>
+            <li><a href="/applications" class="nav-link active"><span class="nav-icon">▣</span> APPLICATIONS</a></li>
+            <li><a href="/deployments" class="nav-link"><span class="nav-icon">▲</span> DEPLOYMENTS</a></li>
+            <li><a href="/domains" class="nav-link"><span class="nav-icon">◉</span> NETWORK</a></li>
+            <li><a href="/settings" class="nav-link"><span class="nav-icon">✦</span> SYS CONFIG</a></li>
+        </ul>
+        <div class="sidebar-footer">
+            {{if .Session}}
+            <span class="user-badge">{{.Session.Username}}</span>
+            <form method="POST" action="/logout">
+                <input type="hidden" name="_csrf" value="{{.Session.CSRFToken}}">
+                <button type="submit" class="btn-logout">[ LOGOUT ]</button>
+            </form>
+            {{end}}
+        </div>
+    </nav>
+
+    <main class="main-content" role="main">
+        <!-- Header -->
+        <div class="page-header">
+            <div>
+                <div class="breadcrumb">
+                    <a href="/applications">APPLICATIONS</a> / <span>{{.App.ID}}</span>
+                </div>
+                <div class="title-with-status">
+                    <h1>{{.App.Name}}</h1>
+                    <span class="status-badge status-{{.App.Status}}">{{.App.Status}}</span>
+                </div>
+                {{if eq .App.Status "running"}}
+                <div hx-get="/applications/{{.App.ID}}/stats" hx-trigger="every 5s" hx-swap="innerHTML" style="margin-top: 10px; font-family: var(--font-mono); font-size: 0.8rem; background: var(--rp-base); padding: 5px; border: 1px solid var(--rp-surface2);">
+                    <span class="text-muted">Loading metrics...</span>
+                </div>
+                {{end}}
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="header-actions">
+                <a href="/applications/{{.App.ID}}/logs" class="btn btn-secondary">
+                    LOG
+                </a>
+
+                {{if eq .App.Status "running"}}
+                <form method="POST" action="/applications/{{.App.ID}}/restart" style="display:inline">
+                    <input type="hidden" name="_csrf" value="{{if .Session}}{{.Session.CSRFToken}}{{end}}">
+                    <button type="submit" class="btn btn-secondary">↺ RESTART</button>
+                </form>
+                <form method="POST" action="/applications/{{.App.ID}}/stop" style="display:inline">
+                    <input type="hidden" name="_csrf" value="{{if .Session}}{{.Session.CSRFToken}}{{end}}">
+                    <button type="submit" class="btn btn-warning">⏹ STOP</button>
+                </form>
+                {{else if eq .App.Status "stopped"}}
+                <form method="POST" action="/applications/{{.App.ID}}/start" style="display:inline">
+                    <input type="hidden" name="_csrf" value="{{if .Session}}{{.Session.CSRFToken}}{{end}}">
+                    <button type="submit" class="btn btn-success">▶ START</button>
+                </form>
+                {{end}}
+
+                <form method="POST" action="/applications/{{.App.ID}}/deploy" style="display:inline">
+                    <input type="hidden" name="_csrf" value="{{if .Session}}{{.Session.CSRFToken}}{{end}}">
+                    <button type="submit" class="btn btn-primary">▲ DEPLOY NOW</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Flash Alerts -->
+        {{if .Msg}}
+        <div class="alert alert-success">
+            {{if eq .Msg "config_updated"}}[ OK ] CONFIGURATION UPDATED SUCCESSFULLY.
+            {{else if eq .Msg "env_saved"}}[ OK ] ENVIRONMENT VARIABLES SAVED. REDEPLOY TO APPLY TO CONTAINER.
+            {{else if eq .Msg "domain_added"}}[ OK ] DOMAIN REGISTERED AND CADDY ROUTE CONFIGURED.
+            {{else if eq .Msg "domain_deleted"}}[ OK ] DOMAIN REMOVED.
+            {{else if eq .Msg "domain_exists"}}[ INFO ] DOMAIN ALREADY REGISTERED.
+            {{else}}{{.Msg}}{{end}}
+        </div>
+        {{end}}
+
+        {{if .Error}}
+        <div class="alert alert-error">SYSTEM ERROR — {{.Error}}</div>
+        {{end}}
+
+        <!-- 2-column grid: Config + Runtime Info -->
+        <div class="grid-2col">
+            <!-- General Configuration -->
+            <section class="card">
+                <div class="card-header">
+                    <h2><span class="card-icon">✦</span> GENERAL CONFIGURATION</h2>
+                </div>
+                <form method="POST" action="/applications/{{.App.ID}}">
+                    <input type="hidden" name="_csrf" value="{{if .Session}}{{.Session.CSRFToken}}{{end}}">
+
+                    <div class="form-group">
+                        <label for="name">APPLICATION NAME</label>
+                        <input type="text" id="name" name="name" value="{{.App.Name}}" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="port">CONTAINER PORT</label>
+                        <input type="number" id="port" name="port" value="{{.App.Port}}" min="1" max="65535" required>
+                        <small>Internal port your app listens on (e.g. 3000, 8080).</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="healthcheck_path">HTTP HEALTHCHECK PATH (Optional)</label>
+                        <input type="text" id="healthcheck_path" name="healthcheck_path" value="{{.App.HealthcheckPath}}" placeholder="/api/health">
+                        <small>If set, Zero-Downtime deploy waits for this path to return HTTP 200 OK before switching traffic.</small>
+                    </div>
+
+                    {{if eq .App.Source.Type "git"}}
+                    <div class="form-group">
+                        <label for="git_url">GIT REPOSITORY URL</label>
+                        <input type="text" id="git_url" name="git_url" value="{{.App.Source.GitURL}}" required>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group flex-1">
+                            <label for="git_branch">BRANCH</label>
+                            <input type="text" id="git_branch" name="git_branch" value="{{.App.Source.GitBranch}}">
+                        </div>
+                        <div class="form-group flex-1">
+                            <label for="dockerfile_path">DOCKERFILE PATH</label>
+                            <input type="text" id="dockerfile_path" name="dockerfile_path" value="{{if .App.Source.DockerfilePath}}{{.App.Source.DockerfilePath}}{{else}}Dockerfile{{end}}">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="git_auth_type">AUTHENTICATION (PRIVATE REPOS)</label>
+                        <select id="git_auth_type" name="git_auth_type" onchange="showDetailGitAuth(this.value)">
+                            <option value="none" {{if eq .App.Source.GitAuthType "none" ""}}selected{{end}}>PUBLIC (NO CREDENTIALS)</option>
+                            <option value="token" {{if eq .App.Source.GitAuthType "token"}}selected{{end}}>PERSONAL ACCESS TOKEN</option>
+                            <option value="ssh_key" {{if eq .App.Source.GitAuthType "ssh_key"}}selected{{end}}>SSH PRIVATE KEY</option>
+                        </select>
+                    </div>
+
+                    <div id="detail-git-token" class="form-group" style="{{if ne .App.Source.GitAuthType "token"}}display:none;{{end}}">
+                        <label for="git_token">UPDATE ACCESS TOKEN</label>
+                        <div class="copy-input-group">
+                            <input type="password" id="git_token" name="git_token"
+                                placeholder="{{if .App.Source.GitToken}}•••••••• (Leave blank to keep current){{else}}ghp_... or glpat-...{{end}}">
+                            <button type="button" class="btn btn-secondary btn-sm" onclick="toggleSecretVisibility('git_token', this)">SHOW</button>
+                        </div>
+                    </div>
+
+                    <div id="detail-git-ssh" class="form-group" style="{{if ne .App.Source.GitAuthType "ssh_key"}}display:none;{{end}}">
+                        <label for="git_ssh_key">UPDATE SSH PRIVATE KEY</label>
+                        <textarea id="git_ssh_key" name="git_ssh_key" rows="4" class="code-textarea"
+                            placeholder="{{if .App.Source.GitSSHKey}}Leave blank to keep existing key{{else}}-----BEGIN OPENSSH PRIVATE KEY-----...{{end}}"></textarea>
+                    </div>
+
+                    {{else if eq .App.Source.Type "image"}}
+                    <div class="form-group">
+                        <label for="image_ref">DOCKER IMAGE</label>
+                        <input type="text" id="image_ref" name="image_ref" value="{{.App.Source.ImageRef}}" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="registry_username">REGISTRY USERNAME (OPTIONAL)</label>
+                        <input type="text" id="registry_username" name="registry_username"
+                            value="{{if .App.Source.RegistryAuth}}{{.App.Source.RegistryAuth.Username}}{{end}}"
+                            placeholder="Registry username">
+                    </div>
+                    <div class="form-group">
+                        <label for="registry_password">REGISTRY PASSWORD / TOKEN</label>
+                        <input type="password" id="registry_password" name="registry_password"
+                            placeholder="{{if and .App.Source.RegistryAuth .App.Source.RegistryAuth.Password}}•••••••• (Leave blank to keep current){{else}}Registry password or token{{end}}">
+                    </div>
+                    {{end}}
+
+                    <div class="form-group">
+                        <label for="memory_mb">RAM LIMIT (MB)</label>
+                        <input type="number" id="memory_mb" name="memory_mb"
+                            value="{{if .App.ResourceLimits}}{{.App.ResourceLimits.MemoryMB}}{{else}}0{{end}}"
+                            min="0" max="8192">
+                        <small>Max memory cap (e.g. 256 or 512 MB). 0 = no limit.</small>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary">[ SAVE CONFIGURATION ]</button>
+                </form>
+            </section>
+
+            <!-- Runtime Info + Webhook -->
+            <div class="column-stack">
+                <section class="card">
+                    <div class="card-header">
+                        <h2><span class="card-icon">◈</span> RUNTIME INFO</h2>
+                    </div>
+                    <dl class="info-list">
+                        <dt>APP ID</dt><dd><code>{{.App.ID}}</code></dd>
+                        <dt>SOURCE</dt><dd><span class="badge-neutral">{{.App.Source.Type}}</span></dd>
+                        <dt>CONTAINER</dt><dd>{{if .App.ContainerID}}<code>{{slice .App.ContainerID 0 12}}</code>{{else}}<span class="text-muted">NONE</span>{{end}}</dd>
+                        <dt>NETWORK</dt><dd><code>{{if .App.NetworkName}}{{.App.NetworkName}}{{else}}liteploy-net{{end}}</code></dd>
+                        <dt>CREATED</dt><dd style="font-family:var(--font-mono)">{{formatTime .App.CreatedAt}}</dd>
+                        <dt>UPDATED</dt><dd style="font-family:var(--font-mono)">{{formatTime .App.UpdatedAt}}</dd>
+                    </dl>
+                </section>
+
+                <!-- Webhook Card -->
+                <section class="card">
+                    <div class="card-header">
+                        <h2><span class="card-icon">◉</span> WEBHOOK AUTO-DEPLOY</h2>
+                    </div>
+                    <p class="text-sm text-muted mb-3">Trigger automated builds on git push via GitHub, GitLab, or Gitea webhooks.</p>
+
+                    <div class="form-group">
+                        <label>WEBHOOK URL (PAYLOAD URL)</label>
+                        <div class="copy-input-group">
+                            <input type="text" readonly value="{{.WebhookURL}}" id="webhook-url-input">
+                            <button type="button" class="btn btn-secondary btn-sm" data-copy="{{.WebhookURL}}">COPY</button>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>WEBHOOK SECRET (HMAC-SHA256)</label>
+                        <div class="copy-input-group">
+                            <input type="password" readonly value="{{if .App.WebhookSecret}}{{.App.WebhookSecret}}{{else}}default-secret-{{.App.ID}}{{end}}" id="webhook-secret-input">
+                            <button type="button" class="btn btn-secondary btn-sm" onclick="toggleSecretVisibility('webhook-secret-input', this)">SHOW</button>
+                            <button type="button" class="btn btn-secondary btn-sm" data-copy="{{if .App.WebhookSecret}}{{.App.WebhookSecret}}{{else}}default-secret-{{.App.ID}}{{end}}">COPY</button>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </div>
+
+        <!-- Domains & SSL -->
+        <section class="card mt-4">
+            <div class="card-header flex-between">
+                <div>
+                    <h2><span class="card-icon">◉</span> NETWORK TERMINALS &amp; SSL</h2>
+                    <p class="subtitle text-sm">Domains mapped to this container port with automatic HTTPS</p>
+                </div>
+            </div>
+
+            <form method="POST" action="/applications/{{.App.ID}}/domains" class="form-inline mb-4">
+                <input type="hidden" name="_csrf" value="{{if .Session}}{{.Session.CSRFToken}}{{end}}">
+                <div class="form-group flex-1">
+                    <input type="text" name="domain" placeholder="e.g. app.yourdomain.com" required
+                        pattern="^([a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$">
+                </div>
+                <button type="submit" class="btn btn-secondary">[ + ADD DOMAIN ]</button>
+            </form>
+
+            {{if .App.Domains}}
+            <table class="table" role="table">
+                <thead>
+                    <tr>
+                        <th>DOMAIN</th>
+                        <th>UPSTREAM TARGET</th>
+                        <th>DNS STATUS</th>
+                        <th>ACTION</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{range .App.Domains}}
+                    <tr>
+                        <td>
+                            <strong class="domain-title">{{.}}</strong>
+                            <a href="http://{{.}}" target="_blank" rel="noopener noreferrer" class="text-xs ml-1 text-muted">↗</a>
+                        </td>
+                        <td><code class="code-sm">liteploy-{{$.App.ID}}:{{$.App.Port}}</code></td>
+                        <td>
+                            <button type="button" class="btn btn-sm btn-secondary" onclick="checkDomainDNS(this, '{{.}}')"
+                                aria-label="Check DNS for {{.}}">◎ TEST DNS</button>
+                            <span class="dns-result text-xs ml-2"></span>
+                        </td>
+                        <td>
+                            <form method="POST" action="/applications/{{$.App.ID}}/domains/delete" style="display:inline"
+                                onsubmit="return confirm('Remove domain {{.}} from this application?')">
+                                <input type="hidden" name="_csrf" value="{{if $.Session}}{{$.Session.CSRFToken}}{{end}}">
+                                <input type="hidden" name="domain" value="{{.}}">
+                                <button type="submit" class="btn btn-sm btn-danger">REMOVE</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {{end}}
+                </tbody>
+            </table>
+            {{else}}
+            <p class="empty">No domains configured yet. Add your domain above to enable HTTPS routing.</p>
+            {{end}}
+        </section>
+
+        <!-- Environment Variables -->
+        <section class="card mt-4">
+            <div class="card-header flex-between">
+                <div>
+                    <h2><span class="card-icon">🔐</span> ENVIRONMENT VARIABLES</h2>
+                    <p class="subtitle text-sm">Key-value pairs injected into container runtime</p>
+                </div>
+                <button type="button" class="btn btn-sm btn-secondary" onclick="toggleEnvEditor()">RAW .ENV MODE</button>
+            </div>
+
+            <form method="POST" action="/applications/{{.App.ID}}/env" id="env-form">
+                <input type="hidden" name="_csrf" value="{{if .Session}}{{.Session.CSRFToken}}{{end}}">
+
+                <!-- Key-Value Mode -->
+                <div id="env-kv-container">
+                    <div id="env-rows">
+                        {{if .Env}}
+                        {{range $k, $v := .Env}}
+                        <div class="env-row">
+                            <input type="text" name="env_key[]" value="{{$k}}" placeholder="KEY" class="env-key-input">
+                            <input type="password" name="env_val[]" value="{{$v}}" placeholder="VALUE" class="env-val-input">
+                            <button type="button" class="btn btn-sm btn-secondary btn-reveal" onclick="toggleEnvRowVisibility(this)" aria-label="Toggle visibility">👁</button>
+                            <button type="button" class="btn btn-sm btn-danger" onclick="this.closest('.env-row').remove()" aria-label="Remove variable">✕</button>
+                        </div>
+                        {{end}}
+                        {{else}}
+                        <div class="env-row">
+                            <input type="text" name="env_key[]" placeholder="KEY (e.g. DATABASE_URL)" class="env-key-input">
+                            <input type="password" name="env_val[]" placeholder="VALUE" class="env-val-input">
+                            <button type="button" class="btn btn-sm btn-secondary btn-reveal" onclick="toggleEnvRowVisibility(this)" aria-label="Toggle visibility">👁</button>
+                            <button type="button" class="btn btn-sm btn-danger" onclick="this.closest('.env-row').remove()" aria-label="Remove variable">✕</button>
+                        </div>
+                        {{end}}
+                    </div>
+                    <button type="button" class="btn btn-sm btn-secondary mt-2" onclick="addEnvRow()">[ + ADD VARIABLE ]</button>
+                </div>
+
+                <!-- Raw .env Mode -->
+                <div id="env-raw-container" style="display:none;">
+                    <textarea name="raw_env" id="raw-env-textarea" rows="10" class="code-textarea"
+                        placeholder="KEY=VALUE&#10;PORT=3000&#10;NODE_ENV=production">{{if .Env}}{{range $k, $v := .Env}}{{$k}}={{$v}}&#10;{{end}}{{end}}</textarea>
+                    <small class="text-muted">One <code>KEY=VALUE</code> per line. Standard .env format.</small>
+                </div>
+
+                <div class="mt-4">
+                    <button type="submit" class="btn btn-primary">[ SAVE ENVIRONMENT ]</button>
+                </div>
+            </form>
+        </section>
+
+        <!-- Persistent Volumes -->
+        <section class="card mt-4">
+            <div class="card-header">
+                <h2><span class="card-icon">💾</span> PERSISTENT VOLUMES</h2>
+                <p class="subtitle text-sm">Map host directories to container paths to persist data</p>
+            </div>
+
+            <form method="POST" action="/applications/{{.App.ID}}">
+                <input type="hidden" name="_csrf" value="{{if .Session}}{{.Session.CSRFToken}}{{end}}">
+                <!-- Send other config fields so they don't get cleared -->
+                <input type="hidden" name="name" value="{{.App.Name}}">
+                <input type="hidden" name="port" value="{{.App.Port}}">
+                <input type="hidden" name="healthcheck_path" value="{{.App.HealthcheckPath}}">
+                <input type="hidden" name="git_url" value="{{.App.Source.GitURL}}">
+                <input type="hidden" name="git_branch" value="{{.App.Source.GitBranch}}">
+                <input type="hidden" name="dockerfile_path" value="{{.App.Source.DockerfilePath}}">
+                <input type="hidden" name="git_auth_type" value="{{.App.Source.GitAuthType}}">
+                <input type="hidden" name="image_ref" value="{{.App.Source.ImageRef}}">
+                {{if .App.Source.RegistryAuth}}
+                <input type="hidden" name="registry_username" value="{{.App.Source.RegistryAuth.Username}}">
+                {{end}}
+                <input type="hidden" name="memory_mb" value="{{if .App.ResourceLimits}}{{.App.ResourceLimits.MemoryMB}}{{else}}0{{end}}">
+
+                <div id="volume-rows">
+                    {{if .App.Volumes}}
+                    {{range .App.Volumes}}
+                    <div class="env-row">
+                        <input type="text" name="vol_host[]" value="{{.HostPath}}" placeholder="/host/path (e.g. /var/lib/app-data)" class="env-key-input" style="flex:1">
+                        <span class="text-muted" style="padding: 0 0.5rem">:</span>
+                        <input type="text" name="vol_container[]" value="{{.ContainerPath}}" placeholder="/container/path (e.g. /data)" class="env-val-input" style="flex:1">
+                        <button type="button" class="btn btn-sm btn-danger" onclick="this.closest('.env-row').remove()" aria-label="Remove volume">✕</button>
+                    </div>
+                    {{end}}
+                    {{else}}
+                    <div class="env-row">
+                        <input type="text" name="vol_host[]" placeholder="/host/path (e.g. /var/lib/liteploy/vols/db)" class="env-key-input" style="flex:1">
+                        <span class="text-muted" style="padding: 0 0.5rem">:</span>
+                        <input type="text" name="vol_container[]" placeholder="/container/path (e.g. /var/lib/postgresql/data)" class="env-val-input" style="flex:1">
+                        <button type="button" class="btn btn-sm btn-danger" onclick="this.closest('.env-row').remove()" aria-label="Remove volume">✕</button>
+                    </div>
+                    {{end}}
+                </div>
+                <button type="button" class="btn btn-sm btn-secondary mt-2" onclick="addVolumeRow()">[ + ADD VOLUME ]</button>
+
+                <div class="mt-4">
+                    <button type="submit" class="btn btn-primary">[ SAVE VOLUMES ]</button>
+                </div>
+            </form>
+        </section>
+
+        <!-- Deployment History -->
+        <section class="card mt-4">
+            <div class="card-header">
+                <h2><span class="card-icon">▲</span> DEPLOYMENT HISTORY</h2>
+            </div>
+            {{if .Deployments}}
+            <table class="table" role="table">
+                <thead>
+                    <tr>
+                        <th>BUILD ID</th>
+                        <th>STATUS</th>
+                        <th>TRIGGER</th>
+                        <th>COMMIT</th>
+                        <th>DURATION</th>
+                        <th>TIMESTAMP</th>
+                        <th>LOG</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{range .Deployments}}
+                    <tr>
+                        <td><a href="/deployments/{{.ID}}" class="font-bold code-link">#{{.ID}}</a></td>
+                        <td><span class="status-badge status-{{.Status}}">{{.Status}}</span></td>
+                        <td><span class="badge-neutral">{{.TriggeredBy}}</span></td>
+                        <td>{{if .CommitSHA}}<code>{{slice .CommitSHA 0 7}}</code>{{else}}&mdash;{{end}}</td>
+                        <td>{{if .Duration}}{{formatDuration .Duration}}{{else}}&mdash;{{end}}</td>
+                        <td><span class="text-sm text-muted" style="font-family:var(--font-mono)">{{formatTime .CreatedAt}}</span></td>
+                        <td>
+                            <div class="actions" style="gap: 5px;">
+                                <a href="/deployments/{{.ID}}" class="btn btn-sm btn-secondary">VIEW LOG</a>
+                                {{if eq .Status "success"}}
+                                <form method="POST" action="/applications/{{$.App.ID}}/rollback/{{.ID}}" style="display:inline;" onsubmit="return confirm('Rollback to this deployment? This will switch the active image immediately.');">
+                                    <input type="hidden" name="_csrf" value="{{if $.Session}}{{$.Session.CSRFToken}}{{end}}">
+                                    <button type="submit" class="btn btn-sm btn-warning">ROLLBACK</button>
+                                </form>
+                                {{end}}
+                            </div>
+                        </td>
+                    </tr>
+                    {{end}}
+                </tbody>
+            </table>
+            {{else}}
+            <p class="empty">No deployments yet. Click [ DEPLOY NOW ] to trigger your first build.</p>
+            {{end}}
+        </section>
+
+        <!-- Danger Zone -->
+        <section class="card card-danger mt-4">
+            <div class="card-header">
+                <h2 class="text-danger">⚠ DANGER ZONE</h2>
+            </div>
+            <div class="flex-between">
+                <div>
+                    <strong style="font-family:var(--font-pixel); font-size:0.42rem; color:var(--rp-danger)">TERMINATE APPLICATION</strong>
+                    <p class="text-sm text-muted" style="margin-top:0.3rem">Permanently stops containers, removes all configuration and deployment history. This action cannot be undone.</p>
+                </div>
+                <form method="POST" action="/applications/{{.App.ID}}/delete"
+                    onsubmit="return confirm('CONFIRM DELETION: Are you absolutely sure you want to delete application {{.App.Name}}? This cannot be undone.')">
+                    <input type="hidden" name="_csrf" value="{{if .Session}}{{.Session.CSRFToken}}{{end}}">
+                    <button type="submit" class="btn btn-danger">[ DELETE APPLICATION ]</button>
+                </form>
+            </div>
+        </section>
+    </main>
+
+    <script>
+    function toggleSecretVisibility(inputId, btn) {
+        const inp = document.getElementById(inputId);
+        if (inp.type === 'password') {
+            inp.type = 'text';
+            btn.textContent = 'HIDE';
+        } else {
+            inp.type = 'password';
+            btn.textContent = 'SHOW';
+        }
+    }
+
+    function toggleEnvRowVisibility(btn) {
+        const row = btn.closest('.env-row');
+        const inp = row.querySelector('.env-val-input');
+        if (inp.type === 'password') {
+            inp.type = 'text';
+            btn.textContent = '🔒';
+        } else {
+            inp.type = 'password';
+            btn.textContent = '👁';
+        }
+    }
+
+    function addEnvRow() {
+        const container = document.getElementById('env-rows');
+        const div = document.createElement('div');
+        div.className = 'env-row';
+        div.innerHTML = `
+            <input type="text" name="env_key[]" placeholder="KEY" class="env-key-input">
+            <input type="password" name="env_val[]" placeholder="VALUE" class="env-val-input">
+            <button type="button" class="btn btn-sm btn-secondary btn-reveal" onclick="toggleEnvRowVisibility(this)" aria-label="Toggle visibility">👁</button>
+            <button type="button" class="btn btn-sm btn-danger" onclick="this.closest('.env-row').remove()" aria-label="Remove">✕</button>
+        `;
+        container.appendChild(div);
+    }
+
+    function addVolumeRow() {
+        const container = document.getElementById('volume-rows');
+        const div = document.createElement('div');
+        div.className = 'env-row';
+        div.innerHTML = `
+            <input type="text" name="vol_host[]" placeholder="/host/path" class="env-key-input" style="flex:1">
+            <span class="text-muted" style="padding: 0 0.5rem">:</span>
+            <input type="text" name="vol_container[]" placeholder="/container/path" class="env-val-input" style="flex:1">
+            <button type="button" class="btn btn-sm btn-danger" onclick="this.closest('.env-row').remove()" aria-label="Remove">✕</button>
+        `;
+        container.appendChild(div);
+    }
+
+    let isRawEnv = false;
+    function toggleEnvEditor() {
+        const kv = document.getElementById('env-kv-container');
+        const raw = document.getElementById('env-raw-container');
+        const btn = event.target;
+        if (!isRawEnv) {
+            kv.style.display = 'none';
+            raw.style.display = 'block';
+            btn.textContent = 'KEY-VALUE MODE';
+            isRawEnv = true;
+        } else {
+            kv.style.display = 'block';
+            raw.style.display = 'none';
+            btn.textContent = 'RAW .ENV MODE';
+            isRawEnv = false;
+        }
+    }
+
+    function showDetailGitAuth(authType) {
+        document.getElementById('detail-git-token').style.display = authType === 'token' ? 'block' : 'none';
+        document.getElementById('detail-git-ssh').style.display = authType === 'ssh_key' ? 'block' : 'none';
+    }
+
+    function checkDomainDNS(btn, domain) {
+        const resultSpan = btn.parentElement.querySelector('.dns-result');
+        resultSpan.textContent = 'RESOLVING...';
+        resultSpan.className = 'dns-result text-xs ml-2 text-muted';
+        btn.disabled = true;
+
+        fetch('/api/dns/check?domain=' + encodeURIComponent(domain))
+            .then(res => res.json())
+            .then(data => {
+                btn.disabled = false;
+                if (data.resolved && data.ips && data.ips.length > 0) {
+                    resultSpan.textContent = '✓ ' + data.ips.join(', ');
+                    resultSpan.className = 'dns-result text-xs ml-2 text-success font-semibold';
+                } else {
+                    resultSpan.textContent = '✗ ' + (data.error || 'NOT RESOLVED');
+                    resultSpan.className = 'dns-result text-xs ml-2 text-danger';
+                }
+            })
+            .catch(() => {
+                btn.disabled = false;
+                resultSpan.textContent = '✗ CHECK FAILED';
+                resultSpan.className = 'dns-result text-xs ml-2 text-danger';
+            });
+    }
+    </script>
+</body>
+</html>

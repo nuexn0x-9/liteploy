@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>APPLICATIONS — LITEPLOY</title>
+    <link rel="stylesheet" href="/static/css/app.css">
+    <script src="/static/js/htmx.min.js" defer></script>
+    <script src="/static/js/app.js" defer></script>
+</head>
+<body class="app-layout">
+    <div class="mobile-topbar">
+        <a href="/" class="logo">LITEPLOY</a>
+        <button class="sidebar-toggle" onclick="document.querySelector('.sidebar').classList.toggle('open')" aria-label="Toggle navigation">☰</button>
+    </div>
+    <nav class="sidebar" role="navigation" aria-label="Main navigation">
+        <div class="sidebar-header">
+            <a href="/" class="logo">LITEPLOY<span class="logo-tagline">> DEPLOYMENT CONSOLE</span></a>
+            <div class="version-tag">v0.1.0</div>
+        </div>
+        <ul class="nav-links">
+            <li><a href="/" class="nav-link"><span class="nav-icon">◈</span> CONTROL ROOM</a></li>
+            <li><a href="/applications" class="nav-link active" aria-current="page"><span class="nav-icon">▣</span> APPLICATIONS</a></li>
+            <li><a href="/deployments" class="nav-link"><span class="nav-icon">▲</span> DEPLOYMENTS</a></li>
+            <li><a href="/domains" class="nav-link"><span class="nav-icon">◉</span> NETWORK</a></li>
+            <li><a href="/settings" class="nav-link"><span class="nav-icon">✦</span> SYS CONFIG</a></li>
+        </ul>
+        <div class="sidebar-footer">
+            {{if .Session}}
+            <span class="user-badge">{{.Session.Username}}</span>
+            <form method="POST" action="/logout">
+                <input type="hidden" name="_csrf" value="{{.Session.CSRFToken}}">
+                <button type="submit" class="btn-logout">[ LOGOUT ]</button>
+            </form>
+            {{end}}
+        </div>
+    </nav>
+    <main class="main-content" role="main">
+        <div class="page-header">
+            <div>
+                <h1>APPLICATIONS</h1>
+                <p class="subtitle">Manage, configure, and monitor all hosted workloads</p>
+            </div>
+            <a href="/applications/new" class="btn btn-primary">[ + NEW APPLICATION ]</a>
+        </div>
+
+        {{if .Apps}}
+        <div class="card table-card">
+            <table class="table" role="table">
+                <thead>
+                    <tr>
+                        <th>APPLICATION</th>
+                        <th>STATUS</th>
+                        <th>SOURCE</th>
+                        <th>PORT</th>
+                        <th>DOMAIN(S)</th>
+                        <th>CONTAINER</th>
+                        <th>ACTIONS</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{range .Apps}}
+                    <tr>
+                        <td>
+                            <a href="/applications/{{.ID}}" class="app-title-link" style="font-size:0.42rem">{{.Name}}</a>
+                            <div class="text-xs text-muted" style="font-family:var(--font-mono); margin-top:0.2rem">{{.ID}}</div>
+                        </td>
+                        <td><span class="status-badge status-{{.Status}}">{{.Status}}</span></td>
+                        <td><span class="badge-neutral">{{.Source.Type}}</span></td>
+                        <td><code>:{{.Port}}</code></td>
+                        <td>
+                            {{if .Domains}}
+                            <a href="http://{{index .Domains 0}}" target="_blank" rel="noopener noreferrer" class="domain-link">{{index .Domains 0}}</a>
+                            {{if gt (len .Domains) 1}}
+                            <span class="text-xs text-muted">+{{minus (len .Domains) 1}} more</span>
+                            {{end}}
+                            {{else}}
+                            <span class="text-muted">—</span>
+                            {{end}}
+                        </td>
+                        <td>
+                            {{if .ContainerID}}
+                            <code>{{slice .ContainerID 0 10}}</code>
+                            {{else}}
+                            <span class="text-muted">—</span>
+                            {{end}}
+                        </td>
+                        <td>
+                            <div class="actions">
+                                <a href="/applications/{{.ID}}" class="btn btn-sm btn-secondary">MANAGE</a>
+                                <a href="/applications/{{.ID}}/logs" class="btn btn-sm btn-secondary" title="View Runtime Logs">LOG</a>
+                                <form method="POST" action="/applications/{{.ID}}/deploy" style="display:inline">
+                                    <input type="hidden" name="_csrf" value="{{if $.Session}}{{$.Session.CSRFToken}}{{end}}">
+                                    <button type="submit" class="btn btn-sm btn-primary">DEPLOY</button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {{end}}
+                </tbody>
+            </table>
+        </div>
+        {{else}}
+        <div class="empty-state">
+            <span class="empty-icon">▣</span>
+            <h3>NO APPLICATIONS FOUND</h3>
+            <p>Get started by deploying a Docker image or cloning a Git repository.</p>
+            <a href="/applications/new" class="btn btn-primary">[ + CREATE NEW APPLICATION ]</a>
+        </div>
+        {{end}}
+    </main>
+</body>
+</html>

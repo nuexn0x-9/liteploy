@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LITEPLOY // AUTHENTICATION</title>
+    <link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body class="auth-layout">
+    <div class="auth-card">
+        <div class="auth-header">
+            <span class="auth-logo">LITEPLOY</span>
+            <span class="auth-subtitle">DEPLOYMENT CONSOLE</span>
+            <div class="auth-status-line">SYSTEM READY. AUTHENTICATION REQUIRED.</div>
+        </div>
+
+        {{if .Error}}
+        <div class="alert alert-error">
+            {{if eq .Error "invalid_credentials"}}ACCESS DENIED — Invalid credentials.{{else}}{{.Error}}{{end}}
+        </div>
+        {{end}}
+
+        <form method="POST" action="/login" class="auth-form">
+            <input type="hidden" name="next" value="{{.Next}}">
+            <div class="form-group">
+                <label for="username">OPERATOR ID</label>
+                <input type="text" id="username" name="username" required autocomplete="username" placeholder="Enter username">
+            </div>
+            <div class="form-group">
+                <label for="password">ACCESS CODE</label>
+                <input type="password" id="password" name="password" required autocomplete="current-password" placeholder="Enter password">
+            </div>
+            <button type="submit" class="btn btn-primary btn-full">[ AUTHENTICATE ]</button>
+        </form>
+    </div>
+</body>
+</html>

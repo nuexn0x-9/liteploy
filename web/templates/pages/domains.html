@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NETWORK — LITEPLOY</title>
+    <link rel="stylesheet" href="/static/css/app.css">
+    <script src="/static/js/htmx.min.js" defer></script>
+    <script src="/static/js/app.js" defer></script>
+</head>
+<body class="app-layout">
+    <div class="mobile-topbar">
+        <a href="/" class="logo">LITEPLOY</a>
+        <button class="sidebar-toggle" onclick="document.querySelector('.sidebar').classList.toggle('open')" aria-label="Toggle navigation">☰</button>
+    </div>
+    <nav class="sidebar" role="navigation" aria-label="Main navigation">
+        <div class="sidebar-header">
+            <a href="/" class="logo">LITEPLOY<span class="logo-tagline">> DEPLOYMENT CONSOLE</span></a>
+            <div class="version-tag">v0.1.0</div>
+        </div>
+        <ul class="nav-links">
+            <li><a href="/" class="nav-link"><span class="nav-icon">◈</span> CONTROL ROOM</a></li>
+            <li><a href="/applications" class="nav-link"><span class="nav-icon">▣</span> APPLICATIONS</a></li>
+            <li><a href="/deployments" class="nav-link"><span class="nav-icon">▲</span> DEPLOYMENTS</a></li>
+            <li><a href="/domains" class="nav-link active" aria-current="page"><span class="nav-icon">◉</span> NETWORK</a></li>
+            <li><a href="/settings" class="nav-link"><span class="nav-icon">✦</span> SYS CONFIG</a></li>
+        </ul>
+        <div class="sidebar-footer">
+            {{if .Session}}
+            <span class="user-badge">{{.Session.Username}}</span>
+            <form method="POST" action="/logout">
+                <input type="hidden" name="_csrf" value="{{.Session.CSRFToken}}">
+                <button type="submit" class="btn-logout">[ LOGOUT ]</button>
+            </form>
+            {{end}}
+        </div>
+    </nav>
+    <main class="main-content" role="main">
+        <div class="page-header">
+            <div>
+                <h1>NETWORK TERMINALS</h1>
+                <p class="subtitle">Active domain mappings routed via Caddy Reverse Proxy</p>
+            </div>
+        </div>
+
+        <div class="info-box">
+            <div class="info-box-icon">◈</div>
+            <div class="info-box-content">
+                <strong style="font-family:var(--font-pixel); font-size:0.42rem; color:var(--rp-primary)">ROUTING PROTOCOL</strong><br>
+                Point your domain <code>A</code> or <code>AAAA</code> record to your VPS IP. Caddy will automatically provision Let's Encrypt / ZeroSSL TLS certificates and proxy traffic to the designated application container port.
+            </div>
+        </div>
+
+        {{if .Domains}}
+        <div class="card table-card">
+            <table class="table" role="table">
+                <thead>
+                    <tr>
+                        <th>DOMAIN</th>
+                        <th>APPLICATION</th>
+                        <th>UPSTREAM</th>
+                        <th>STATUS</th>
+                        <th>DNS DIAGNOSTIC</th>
+                        <th>LINK</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{range .Domains}}
+                    <tr>
+                        <td><strong class="domain-title">{{.Domain}}</strong></td>
+                        <td>
+                            <a href="/applications/{{.AppID}}" class="app-link">{{.AppName}} <span class="text-muted text-xs">({{.AppID}})</span></a>
+                        </td>
+                        <td><code class="code-sm">{{.Upstream}}</code></td>
+                        <td><span class="status-badge status-{{.Status}}">{{.Status}}</span></td>
+                        <td>
+                            <button class="btn btn-sm btn-secondary check-dns-btn"
+                                data-domain="{{.Domain}}"
+                                onclick="checkDomainDNS(this, '{{.Domain}}')"
+                                aria-label="Check DNS for {{.Domain}}">
+                                ◎ CHECK DNS
+                            </button>
+                            <span class="dns-result text-xs ml-2"></span>
+                        </td>
+                        <td>
+                            <a href="http://{{.Domain}}" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-icon">
+                                ↗ VISIT
+                            </a>
+                        </td>
+                    </tr>
+                    {{end}}
+                </tbody>
+            </table>
+        </div>
+        {{else}}
+        <div class="empty-state">
+            <span class="empty-icon">◉</span>
+            <h3>NO NETWORK TERMINALS MAPPED</h3>
+            <p>Go to any application's detail page to add domain bindings (e.g. <code>app.yourdomain.com</code>).</p>
+            <a href="/applications" class="btn btn-primary">[ GO TO APPLICATIONS ]</a>
+        </div>
+        {{end}}
+    </main>
+
+    <script>
+    function checkDomainDNS(btn, domain) {
+        const resultSpan = btn.parentElement.querySelector('.dns-result');
+        resultSpan.textContent = 'RESOLVING...';
+        resultSpan.className = 'dns-result text-xs ml-2 text-muted';
+        btn.disabled = true;
+
+        fetch('/api/dns/check?domain=' + encodeURIComponent(domain))
+            .then(res => res.json())
+            .then(data => {
+                btn.disabled = false;
+                if (data.resolved && data.ips && data.ips.length > 0) {
+                    resultSpan.textContent = '✓ ' + data.ips.join(', ');
+                    resultSpan.className = 'dns-result text-xs ml-2 text-success font-semibold';
+                } else {
+                    resultSpan.textContent = '✗ ' + (data.error || 'NOT RESOLVED');
+                    resultSpan.className = 'dns-result text-xs ml-2 text-danger';
+                }
+            })
+            .catch(() => {
+                btn.disabled = false;
+                resultSpan.textContent = '✗ CHECK FAILED';
+                resultSpan.className = 'dns-result text-xs ml-2 text-danger';
+            });
+    }
+    </script>
+</body>
+</html>

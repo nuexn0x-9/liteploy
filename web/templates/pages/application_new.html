@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NEW APPLICATION — LITEPLOY</title>
+    <link rel="stylesheet" href="/static/css/app.css">
+    <script src="/static/js/htmx.min.js" defer></script>
+    <script src="/static/js/app.js" defer></script>
+</head>
+<body class="app-layout">
+    <div class="mobile-topbar">
+        <a href="/" class="logo">LITEPLOY</a>
+        <button class="sidebar-toggle" onclick="document.querySelector('.sidebar').classList.toggle('open')" aria-label="Toggle navigation">☰</button>
+    </div>
+    <nav class="sidebar" role="navigation" aria-label="Main navigation">
+        <div class="sidebar-header">
+            <a href="/" class="logo">LITEPLOY<span class="logo-tagline">> DEPLOYMENT CONSOLE</span></a>
+            <div class="version-tag">v0.1.0</div>
+        </div>
+        <ul class="nav-links">
+            <li><a href="/" class="nav-link"><span class="nav-icon">◈</span> CONTROL ROOM</a></li>
+            <li><a href="/applications" class="nav-link active"><span class="nav-icon">▣</span> APPLICATIONS</a></li>
+            <li><a href="/deployments" class="nav-link"><span class="nav-icon">▲</span> DEPLOYMENTS</a></li>
+            <li><a href="/domains" class="nav-link"><span class="nav-icon">◉</span> NETWORK</a></li>
+            <li><a href="/settings" class="nav-link"><span class="nav-icon">✦</span> SYS CONFIG</a></li>
+        </ul>
+        <div class="sidebar-footer">
+            {{if .Session}}
+            <span class="user-badge">{{.Session.Username}}</span>
+            <form method="POST" action="/logout">
+                <input type="hidden" name="_csrf" value="{{.Session.CSRFToken}}">
+                <button type="submit" class="btn-logout">[ LOGOUT ]</button>
+            </form>
+            {{end}}
+        </div>
+    </nav>
+    <main class="main-content" role="main">
+        <div class="page-header">
+            <div>
+                <h1>NEW APPLICATION</h1>
+                <p class="subtitle">Initialize a new workload from Git or Docker Registry</p>
+            </div>
+            <a href="/applications" class="btn btn-secondary">← BACK</a>
+        </div>
+
+        {{if .Error}}
+        <div class="alert alert-error">SYSTEM ERROR — {{.Error}}</div>
+        {{end}}
+
+        <form method="POST" action="/applications" class="form-card">
+            <input type="hidden" name="_csrf" value="{{if .Session}}{{.Session.CSRFToken}}{{end}}">
+
+            <!-- Application Name -->
+            <div class="form-group">
+                <label for="name">APPLICATION NAME *</label>
+                <input type="text" id="name" name="name" required
+                    pattern="[a-zA-Z0-9][a-zA-Z0-9_-]{0,62}[a-zA-Z0-9]|[a-zA-Z0-9]"
+                    placeholder="e.g. backend-api, web-frontend">
+                <small>Alphanumeric, hyphens, underscores (1–64 characters).</small>
+            </div>
+
+            <!-- Source Type -->
+            <div class="form-group">
+                <label for="source_type">WORKLOAD SOURCE *</label>
+                <select id="source_type" name="source_type" required onchange="showSourceFields(this.value)">
+                    <option value="">SELECT SOURCE TYPE...</option>
+                    <option value="git">GIT REPOSITORY (GitHub, GitLab, Gitea, Self-Hosted)</option>
+                    <option value="image">DOCKER IMAGE (Docker Hub, GHCR, Private Registry)</option>
+                </select>
+            </div>
+
+            <!-- Git Repository Fields -->
+            <div id="git-fields" class="source-fields" style="display:none">
+                <div class="form-group">
+                    <label for="git_url">REPOSITORY URL *</label>
+                    <input type="text" id="git_url" name="git_url"
+                        placeholder="https://github.com/owner/repo.git  or  git@github.com:owner/repo.git">
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group flex-1">
+                        <label for="git_branch">BRANCH</label>
+                        <input type="text" id="git_branch" name="git_branch" placeholder="main" value="main">
+                    </div>
+                    <div class="form-group flex-1">
+                        <label for="dockerfile_path">DOCKERFILE PATH</label>
+                        <input type="text" id="dockerfile_path" name="dockerfile_path" placeholder="Dockerfile" value="Dockerfile">
+                    </div>
+                </div>
+
+                <!-- Git Auth Method -->
+                <div class="form-group">
+                    <label for="git_auth_type">AUTHENTICATION (PRIVATE REPOS)</label>
+                    <select id="git_auth_type" name="git_auth_type" onchange="showGitAuthFields(this.value)">
+                        <option value="none">PUBLIC REPOSITORY (NO CREDENTIALS)</option>
+                        <option value="token">PERSONAL ACCESS TOKEN (GitHub PAT / GitLab Token)</option>
+                        <option value="ssh_key">SSH PRIVATE KEY (Deploy Key)</option>
+                    </select>
+                </div>
+
+                <!-- Token Input -->
+                <div id="git-token-field" class="form-group" style="display:none">
+                    <label for="git_token">PERSONAL ACCESS TOKEN *</label>
+                    <div class="copy-input-group">
+                        <input type="password" id="git_token" name="git_token"
+                            placeholder="ghp_... or glpat-... (read scope)">
+                        <button type="button" class="btn btn-secondary btn-sm" onclick="toggleSecretVisibility('git_token', this)">SHOW</button>
+                    </div>
+                    <small>For GitHub: generate a classic or fine-grained token with <code>repo</code> (read) permission.</small>
+                </div>
+
+                <!-- SSH Key Input -->
+                <div id="git-ssh-field" class="form-group" style="display:none">
+                    <label for="git_ssh_key">SSH PRIVATE KEY *</label>
+                    <textarea id="git_ssh_key" name="git_ssh_key" rows="6" class="code-textarea"
+                        placeholder="-----BEGIN OPENSSH PRIVATE KEY-----&#10;...&#10;-----END OPENSSH PRIVATE KEY-----"></textarea>
+                    <small>Paste the private key matching the Deploy Key added to your GitHub/GitLab repository settings.</small>
+                </div>
+            </div>
+
+            <!-- Docker Image Fields -->
+            <div id="image-fields" class="source-fields" style="display:none">
+                <div class="form-group">
+                    <label for="image_ref">DOCKER IMAGE REFERENCE *</label>
+                    <input type="text" id="image_ref" name="image_ref"
+                        placeholder="e.g. nginx:alpine  or  ghcr.io/org/repo:latest">
+                </div>
+
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="private-registry-toggle"
+                            onchange="document.getElementById('registry-fields').style.display = this.checked ? 'block' : 'none'">
+                        PRIVATE REGISTRY (requires authentication)
+                    </label>
+                </div>
+
+                <div id="registry-fields" style="display:none" class="mt-2">
+                    <div class="form-group">
+                        <label for="registry_server">REGISTRY SERVER</label>
+                        <input type="text" id="registry_server" name="registry_server"
+                            placeholder="e.g. ghcr.io  or  https://index.docker.io/v1/">
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group flex-1">
+                            <label for="registry_username">USERNAME</label>
+                            <input type="text" id="registry_username" name="registry_username" placeholder="Username / Organization">
+                        </div>
+                        <div class="form-group flex-1">
+                            <label for="registry_password">PASSWORD / TOKEN</label>
+                            <input type="password" id="registry_password" name="registry_password" placeholder="Access Token / Secret">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Container Port -->
+            <div class="form-group">
+                <label for="port">CONTAINER PORT *</label>
+                <input type="number" id="port" name="port" value="3000" min="1" max="65535" required>
+                <small>Internal port your application listens on (e.g. 3000, 8080, 80).</small>
+            </div>
+
+            <div class="mt-4">
+                <button type="submit" class="btn btn-primary">[ INITIALIZE APPLICATION ]</button>
+            </div>
+        </form>
+
+        <script>
+        function showSourceFields(type) {
+            document.querySelectorAll('.source-fields').forEach(el => el.style.display = 'none');
+            const el = document.getElementById(type + '-fields');
+            if (el) el.style.display = 'block';
+        }
+
+        function showGitAuthFields(authType) {
+            document.getElementById('git-token-field').style.display = authType === 'token' ? 'block' : 'none';
+            document.getElementById('git-ssh-field').style.display = authType === 'ssh_key' ? 'block' : 'none';
+        }
+
+        function toggleSecretVisibility(inputId, btn) {
+            const inp = document.getElementById(inputId);
+            if (inp.type === 'password') {
+                inp.type = 'text';
+                btn.textContent = 'HIDE';
+            } else {
+                inp.type = 'password';
+                btn.textContent = 'SHOW';
+            }
+        }
+        </script>
+    </main>
+</body>
+</html>

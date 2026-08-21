@@ -1,0 +1,33 @@
+[Unit]
+Description=LITEPLOY — Lightweight Docker Deployment Platform
+After=network.target docker.service
+Requires=docker.service
+Wants=caddy.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/var/lib/liteploy
+ExecStart=/usr/local/bin/liteploy
+Restart=always
+RestartSec=5s
+
+# Security Hardening
+ProtectSystem=full
+ProtectHome=read-only
+PrivateTmp=true
+NoNewPrivileges=false
+
+# Environment Settings
+Environment=LITEPLOY_ADDR=:8080
+Environment=LITEPLOY_DATA_DIR=/var/lib/liteploy/data
+Environment=LITEPLOY_CADDY_ADMIN=http://localhost:2019
+Environment=LITEPLOY_LOG_LEVEL=info
+Environment=LITEPLOY_LOG_JSON=true
+
+# Resource Limits
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
