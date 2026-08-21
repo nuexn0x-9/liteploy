@@ -124,11 +124,11 @@ if command -v systemctl >/dev/null 2>&1; then
     log_info "Starting service..."
     # Generate or retain existing session secret
     SESSION_SECRET=""
-    if [ -f "${SERVICE_FILE}" ] && grep -q "LITEPLOY_SESSION_SECRET" "${SERVICE_FILE}"; then
-        SESSION_SECRET=$(grep "LITEPLOY_SESSION_SECRET=" "${SERVICE_FILE}" | cut -d'=' -f2)
+    if [ -f "${SERVICE_FILE}" ] && grep -q "LITEPLOY_SESSION_SECRET=" "${SERVICE_FILE}"; then
+        SESSION_SECRET=$(grep "LITEPLOY_SESSION_SECRET=" "${SERVICE_FILE}" | head -n 1 | cut -d'=' -f2)
     fi
     if [ -z "${SESSION_SECRET}" ]; then
-        SESSION_SECRET=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 64 | head -n 1)
+        SESSION_SECRET=$(openssl rand -hex 32 2>/dev/null || tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 64 2>/dev/null || echo "default-liteploy-session-secret-change-me")
     fi
 
     cat <<EOF > "${SERVICE_FILE}"

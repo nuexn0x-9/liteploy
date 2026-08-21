@@ -18,6 +18,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -64,19 +65,6 @@ func main() {
 		"data_dir", cfg.DataDir,
 	)
 
-	// In dev mode, generate a random session secret. This is not persistent
-	// across restarts — only for local development.
-	sessionSecret := []byte(cfg.SessionSecret)
-	if cfg.DevMode && cfg.SessionSecret == "" {
-		secret, err := system.GenerateSecret(32)
-		if err != nil {
-			logger.Error("failed to generate dev session secret", "error", err)
-			os.Exit(1)
-		}
-		sessionSecret = []byte(secret)
-		logger.Warn("dev mode: using ephemeral session secret (sessions will not persist across restarts)")
-	}
-
 	// Initialize filesystem storage.
 	store, err := storage.New(cfg.DataDir)
 	if err != nil {
@@ -84,6 +72,24 @@ func main() {
 		os.Exit(1)
 	}
 	logger.Info("storage initialized", "root", cfg.DataDir)
+
+	// Determine session secret. If not provided via env, persist to a file in dataDir.
+	sessionSecret := []byte(cfg.SessionSecret)
+	if len(sessionSecret) == 0 {
+		secretFile := filepath.Join(cfg.DataDir, ".session_secret")
+		if data, err := os.ReadFile(secretFile); err == nil && len(data) >= 32 {
+			sessionSecret = data
+		} else {
+			secret, err := system.GenerateSecret(32)
+			if err != nil {
+				logger.Error("failed to generate session secret", "error", err)
+				os.Exit(1)
+			}
+			sessionSecret = []byte(secret)
+			_ = os.WriteFile(secretFile, sessionSecret, 0600)
+			logger.Info("generated persistent session secret", "file", secretFile)
+		}
+	}
 
 	// Initialize auth service.
 	authSvc, err := auth.NewService(sessionSecret, cfg.SessionMaxAge, logger)

@@ -52,14 +52,17 @@ func TestLoad_EnvOverrides(t *testing.T) {
 	}
 }
 
-func TestLoad_RequiresSessionSecret(t *testing.T) {
+func TestLoad_OptionalSessionSecret(t *testing.T) {
 	// Ensure no dev mode and no secret.
 	os.Unsetenv("LITEPLOY_DEV_MODE")
 	os.Unsetenv("LITEPLOY_SESSION_SECRET")
 
-	_, err := Load()
-	if err == nil {
-		t.Fatal("Load() should fail without session secret in production mode")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() should succeed without session secret (auto-generated at runtime): %v", err)
+	}
+	if cfg.SessionSecret != "" {
+		t.Fatalf("expected empty SessionSecret in config before runtime generation, got %q", cfg.SessionSecret)
 	}
 }
 

@@ -81,11 +81,6 @@ func (c *Config) validate() error {
 		// Keep deployment concurrency bounded — image builds can exhaust memory.
 		return fmt.Errorf("LITEPLOY_MAX_DEPLOYMENTS > 4 is not allowed on this architecture")
 	}
-	if c.SessionSecret == "" && !c.DevMode {
-		// In production, a real session secret is required. In dev mode
-		// we generate a random one at startup (not persistent across restarts).
-		return fmt.Errorf("LITEPLOY_SESSION_SECRET must be set (or set LITEPLOY_DEV_MODE=true for development)")
-	}
 	return nil
 }
 
