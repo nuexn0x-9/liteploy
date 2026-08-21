@@ -202,6 +202,7 @@ if command -v systemctl > /dev/null 2>&1 && systemctl list-units --full --all 2>
 
     systemctl stop caddy.service 2>/dev/null || true
     systemctl disable caddy.service 2>/dev/null || true
+    pkill -9 -f /usr/bin/caddy 2>/dev/null || pkill -9 caddy 2>/dev/null || true
     log_ok "Legacy caddy.service stopped and disabled"
     log_info "Liteploy will start liteploy-caddy Docker container automatically on boot."
 fi

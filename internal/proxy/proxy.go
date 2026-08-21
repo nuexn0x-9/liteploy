@@ -104,7 +104,7 @@ func EnsureCaddyContainer(ctx context.Context, dockerCli docker.Engine, dataDir 
 	}
 
 	// 5. Create the liteploy-caddy container.
-	_, err = dockerCli.CreateContainer(ctx, docker.ContainerSpec{
+	caddyID, err := dockerCli.CreateContainer(ctx, docker.ContainerSpec{
 		Name:  CaddyContainerName,
 		Image: CaddyImage,
 		Cmd:   []string{"caddy", "run", "--config", "/data/config.json", "--adapter", "json"},
@@ -128,9 +128,11 @@ func EnsureCaddyContainer(ctx context.Context, dockerCli docker.Engine, dataDir 
 		return fmt.Errorf("proxy: create caddy container: %w", err)
 	}
 
-	if err := dockerCli.StartContainer(ctx, CaddyContainerName); err != nil {
-		return fmt.Errorf("proxy: start caddy container: %w", err)
+	if err := dockerCli.StartContainer(ctx, caddyID); err != nil {
+		return fmt.Errorf("proxy: start caddy container (%s): %w", caddyID[:12], err)
 	}
+
+	slog.Default().Info("liteploy-caddy container created and started", "container_id", caddyID[:12])
 
 	// Wait up to 5 seconds for Caddy Admin API to be ready
 	for i := 0; i < 10; i++ {
