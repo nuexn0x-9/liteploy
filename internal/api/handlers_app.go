@@ -41,7 +41,8 @@ func (s *Server) handleApplicationsList(w http.ResponseWriter, r *http.Request) 
 
 func (s *Server) handleApplicationNew(w http.ResponseWriter, r *http.Request) {
 	s.renderPage(w, r, "application_new.html", map[string]any{
-		"Session": sessionFromContext(r.Context()),
+		"Settings": s.settingsSvc.Get(),
+		"Session":  sessionFromContext(r.Context()),
 	})
 }
 
@@ -119,6 +120,7 @@ func (s *Server) handleApplicationDetail(w http.ResponseWriter, r *http.Request)
 		"Deployments": deployments,
 		"Env":         env,
 		"WebhookURL":  webhookURL,
+		"Settings":    s.settingsSvc.Get(),
 		"Msg":         r.URL.Query().Get("msg"),
 		"Error":       r.URL.Query().Get("error"),
 		"Session":     sessionFromContext(r.Context()),

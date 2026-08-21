@@ -16,7 +16,7 @@
     <nav class="sidebar" role="navigation" aria-label="Main navigation">
         <div class="sidebar-header">
             <a href="/" class="logo">LITEPLOY<span class="logo-tagline">> DEPLOYMENT CONSOLE</span></a>
-            <div class="version-tag">v0.1.0</div>
+            <div class="version-tag">{{appVersion}}</div>
         </div>
         <ul class="nav-links">
             <li><a href="/" class="nav-link"><span class="nav-icon">◈</span> CONTROL ROOM</a></li>
@@ -249,10 +249,22 @@
                 </div>
             </div>
 
+            {{if .Settings.PrimaryDomain}}
+            <div class="info-box mb-3" style="font-size: 0.85rem; padding: 0.6rem 0.8rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem;">
+                <div>
+                    <span style="color: var(--rp-primary); font-family: var(--font-pixel); font-size: 0.38rem;">WILDCARD DNS ACTIVE</span> — 
+                    Use <strong style="color: var(--rp-text);">{{.App.Name}}.{{.Settings.PrimaryDomain}}</strong> for instant HTTPS routing.
+                </div>
+                <button type="button" class="btn btn-sm btn-secondary" onclick="document.querySelector('input[name=domain]').value = '{{.App.Name}}.{{.Settings.PrimaryDomain}}'">
+                    [ USE {{.App.Name}}.{{.Settings.PrimaryDomain}} ]
+                </button>
+            </div>
+            {{end}}
+
             <form method="POST" action="/applications/{{.App.ID}}/domains" class="form-inline mb-4">
                 <input type="hidden" name="_csrf" value="{{if .Session}}{{.Session.CSRFToken}}{{end}}">
                 <div class="form-group flex-1">
-                    <input type="text" name="domain" placeholder="e.g. app.yourdomain.com" required
+                    <input type="text" name="domain" placeholder="{{if .Settings.PrimaryDomain}}{{.App.Name}}.{{.Settings.PrimaryDomain}}{{else}}e.g. app.yourdomain.com{{end}}" required
                         pattern="^([a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$">
                 </div>
                 <button type="submit" class="btn btn-secondary">[ + ADD DOMAIN ]</button>

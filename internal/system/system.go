@@ -11,7 +11,7 @@ import (
 
 // Version information, injected at build time via -ldflags.
 var (
-	Version   = "dev"
+	Version   = "v1.0.0"
 	CommitSHA = "unknown"
 	BuildDate = "unknown"
 )

@@ -250,5 +250,8 @@ func templateFuncs() template.FuncMap {
 			}
 			return id
 		},
+		"appVersion": func() string {
+			return system.Version
+		},
 	}
 }

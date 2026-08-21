@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CONTROL ROOM � LITEPLOY</title>
+    <title>CONTROL ROOM � LITEPLOY</title>
     <link rel="stylesheet" href="/static/css/app.css">
     <script src="/static/js/htmx.min.js" defer></script>
     <script src="/static/js/app.js" defer></script>
@@ -20,7 +20,7 @@
             <a href="/" class="logo">LITEPLOY
                 <span class="logo-tagline">> DEPLOYMENT CONSOLE</span>
             </a>
-            <div class="version-tag">v0.1.0</div>
+            <div class="version-tag">{{appVersion}}</div>
         </div>
         <ul class="nav-links">
             <li><a href="/" class="nav-link active" aria-current="page"><span class="nav-icon">?</span> CONTROL ROOM</a></li>
@@ -52,24 +52,36 @@
         <!-- HUD Stats Row -->
         <div class="stats-row">
             <div class="stat-card">
-                <div class="stat-icon">?</div>
+                <div class="stat-icon">▣</div>
                 <div>
                     <div class="stat-value">{{len .Apps}}</div>
                     <div class="stat-label">APPLICATIONS</div>
                 </div>
             </div>
             <div class="stat-card">
-                <div class="stat-icon">?</div>
+                <div class="stat-icon">●</div>
                 <div>
                     <div class="stat-value" style="color: var(--rp-success)">{{countRunning .Apps}}</div>
                     <div class="stat-label">ONLINE</div>
                 </div>
             </div>
             <div class="stat-card">
-                <div class="stat-icon">?</div>
+                <div class="stat-icon">⚡</div>
                 <div>
                     <div class="stat-value" style="font-size: 0.65rem">&lt; 50 MB</div>
                     <div class="stat-label">ENGINE RAM</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">🌐</div>
+                <div>
+                    {{if .Settings.PrimaryDomain}}
+                    <div class="stat-value" style="font-size: 0.42rem; color: var(--rp-primary);">{{.Settings.PrimaryDomain}}</div>
+                    <div class="stat-label">{{if .Settings.HTTPSEnabled}}HTTPS ACTIVE{{else}}DNS CONFIGURED{{end}}</div>
+                    {{else}}
+                    <div class="stat-value" style="font-size: 0.42rem;"><a href="/setup/domain" style="color: var(--rp-primary);">[ SETUP ]</a></div>
+                    <div class="stat-label">PRIMARY DOMAIN</div>
+                    {{end}}
                 </div>
             </div>
         </div>

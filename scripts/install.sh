@@ -87,13 +87,21 @@ if curl -sL -w "%{http_code}" "${DOWNLOAD_URL}" -o "${TMP_BIN}" | grep -q '200';
     # Check if file size is > 5MB to ensure it's not a tiny XML error page
     FILESIZE=$(stat -c%s "${TMP_BIN}" 2>/dev/null || stat -f%z "${TMP_BIN}" 2>/dev/null || echo 0)
     if [ "$FILESIZE" -gt 5000000 ]; then
-        DOWNLOAD_SUCCESS=true
+        chmod +x "${TMP_BIN}" 2>/dev/null || true
+        # Verify downloaded binary version is current v1.0.0
+        BIN_VER=$("${TMP_BIN}" version 2>/dev/null || echo "v0.0.0")
+        if echo "${BIN_VER}" | grep -q "v1.0.0"; then
+            DOWNLOAD_SUCCESS=true
+            log_ok "Downloaded latest ${BIN_VER}"
+        else
+            log_warn "GitHub Release binary is outdated (${BIN_VER})."
+            log_info "Building latest v1.0.0 directly from source repository..."
+        fi
     fi
 fi
 
 if [ "$DOWNLOAD_SUCCESS" = false ]; then
-    log_warn "GitHub Release binary not found or download failed."
-    log_info "Falling back to building from source..."
+    log_info "Compiling latest LITEPLOY from GitHub main branch..."
     
     if ! command -v git >/dev/null 2>&1; then
         apt-get update -yqq && apt-get install -y git >/dev/null 2>&1 || log_error "Git is required for fallback build."
