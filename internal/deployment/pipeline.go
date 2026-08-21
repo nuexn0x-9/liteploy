@@ -91,15 +91,6 @@ func (p *Pipeline) Execute(ctx context.Context, dep *Deployment, progress io.Wri
 	fmt.Fprintf(progress, "[liteploy] === Starting Deployment #%s for %s ===\n", dep.ID, app.Name)
 
 	var newImageID string
-	var cloneDir string
-
-	defer func() {
-		if cloneDir != "" {
-			if err := git.Cleanup(cloneDir, p.store.Root()); err != nil {
-				p.logger.Warn("pipeline: git cleanup error", "dir", cloneDir, "error", err)
-			}
-		}
-	}()
 
 	// -------------------------------------------------------------
 	// Step 1: PREPARING (Source resolution)
@@ -118,22 +109,20 @@ func (p *Pipeline) Execute(ctx context.Context, dep *Deployment, progress io.Wri
 	} else {
 		switch app.Source.Type {
 		case application.SourceGit:
-		tmpDirName := fmt.Sprintf("build_%s_%s_%d", app.ID, dep.ID, time.Now().Unix())
-		relBuildDir := filepath.Join("state", tmpDirName)
+		relBuildDir := filepath.Join("repos", app.ID)
 		absBuildDir, err := p.store.AbsPath(relBuildDir)
 		if err != nil {
 			return fmt.Errorf("prepare build dir: %w", err)
 		}
-		cloneDir = absBuildDir
 
-		fmt.Fprintf(progress, "[liteploy] Cloning %s (branch: %s)...\n", app.Source.GitURL, app.Source.GitBranch)
+		fmt.Fprintf(progress, "[liteploy] Synchronizing %s (branch: %s)...\n", app.Source.GitURL, app.Source.GitBranch)
 		if app.Source.GitToken != "" {
 			fmt.Fprintf(progress, "[liteploy] Git authentication: Personal Access Token (PAT) configured\n")
 		} else if app.Source.GitSSHKey != "" {
 			fmt.Fprintf(progress, "[liteploy] Git authentication: SSH Private Key configured\n")
 		}
 
-		cloneResult, err := git.Clone(ctx, git.CloneOptions{
+		cloneResult, err := git.Sync(ctx, git.CloneOptions{
 			URL:       app.Source.GitURL,
 			Branch:    app.Source.GitBranch,
 			Depth:     1,
@@ -144,13 +133,13 @@ func (p *Pipeline) Execute(ctx context.Context, dep *Deployment, progress io.Wri
 			Progress:  progress,
 		})
 		if err != nil {
-			return fmt.Errorf("git clone: %w", err)
+			return fmt.Errorf("git sync: %w", err)
 		}
 
 		dep.CommitSHA = cloneResult.CommitSHA
 		buildContextDir = absBuildDir
 		imageName = fmt.Sprintf("liteploy-%s:%s", app.ID, dep.ID)
-		fmt.Fprintf(progress, "[liteploy] Cloned commit %s\n", cloneResult.CommitSHA)
+		fmt.Fprintf(progress, "[liteploy] Synced commit %s\n", cloneResult.CommitSHA)
 
 	case application.SourceImage:
 		imageName = app.Source.ImageRef

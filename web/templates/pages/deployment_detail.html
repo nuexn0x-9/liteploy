@@ -50,7 +50,7 @@
             <dl class="info-list">
                 <dt>APP ID</dt><dd><code>{{.Deployment.AppID}}</code></dd>
                 <dt>TRIGGER</dt><dd><span class="badge-neutral">{{.Deployment.TriggeredBy}}</span></dd>
-                <dt>COMMIT</dt><dd>{{if .Deployment.CommitSHA}}<code>{{slice .Deployment.CommitSHA 0 8}}</code>{{else}}&mdash;{{end}}</dd>
+                <dt>COMMIT</dt><dd>{{if .Deployment.CommitSHA}}<code>{{shortSHA .Deployment.CommitSHA}}</code>{{else}}&mdash;{{end}}</dd>
                 <dt>DURATION</dt><dd id="dep-duration">{{if .Deployment.Duration}}{{formatDuration .Deployment.Duration}}{{else}}&mdash;{{end}}</dd>
                 <dt>CREATED</dt><dd style="font-family:var(--font-mono)">{{formatTime .Deployment.CreatedAt}}</dd>
             </dl>

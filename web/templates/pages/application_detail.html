@@ -400,8 +400,14 @@
 
         <!-- Deployment History -->
         <section class="card mt-4">
-            <div class="card-header">
+            <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
                 <h2><span class="card-icon">▲</span> DEPLOYMENT HISTORY</h2>
+                {{if .Deployments}}
+                <form method="POST" action="/applications/{{.App.ID}}/deployments/clear-failed" style="margin: 0;">
+                    <input type="hidden" name="_csrf" value="{{if .Session}}{{.Session.CSRFToken}}{{end}}">
+                    <button type="submit" class="btn btn-sm btn-secondary" title="Remove all failed and cancelled deployments from list">[ CLEAR FAILED ]</button>
+                </form>
+                {{end}}
             </div>
             {{if .Deployments}}
             <table class="table" role="table">

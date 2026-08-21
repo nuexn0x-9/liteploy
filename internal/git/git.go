@@ -143,7 +143,6 @@ func Clone(ctx context.Context, opts CloneOptions) (*CloneResult, error) {
 		return nil, fmt.Errorf("git clone failed (check repository URL, branch, or token permissions)")
 	}
 
-	// Get the HEAD commit SHA.
 	sha, err := revParse(ctx, opts.TargetDir, "HEAD")
 	if err != nil {
 		return nil, fmt.Errorf("git clone: get commit: %w", err)
@@ -152,6 +151,103 @@ func Clone(ctx context.Context, opts CloneOptions) (*CloneResult, error) {
 	branch := opts.Branch
 	if branch == "" {
 		branch, _ = currentBranch(ctx, opts.TargetDir)
+	}
+
+	return &CloneResult{
+		CommitSHA: sha,
+		Branch:    branch,
+	}, nil
+}
+
+// Sync clones the repository if TargetDir doesn't exist, or fetches and fast-forwards if it does.
+// This significantly speeds up subsequent deployments by reusing git history and maintaining file timestamps for Docker layer caching.
+func Sync(ctx context.Context, opts CloneOptions) (*CloneResult, error) {
+	gitDir := filepath.Join(opts.TargetDir, ".git")
+	if fi, err := os.Stat(gitDir); err != nil || !fi.IsDir() {
+		_ = os.RemoveAll(opts.TargetDir)
+		return Clone(ctx, opts)
+	}
+
+	timeout := opts.Timeout
+	if timeout == 0 {
+		timeout = defaultCloneTimeout
+	}
+	syncCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	sshKeyPath := opts.SSHKeyPath
+	if opts.SSHKey != "" {
+		tmpFile, err := os.CreateTemp("", "liteploy_git_key_*")
+		if err != nil {
+			return nil, fmt.Errorf("git sync: create temp ssh key: %w", err)
+		}
+		defer os.Remove(tmpFile.Name())
+		if _, err := tmpFile.WriteString(opts.SSHKey); err != nil {
+			tmpFile.Close()
+			return nil, fmt.Errorf("git sync: write temp ssh key: %w", err)
+		}
+		tmpFile.Close()
+		_ = os.Chmod(tmpFile.Name(), 0600)
+		sshKeyPath = tmpFile.Name()
+	}
+
+	cloneURL := opts.URL
+	if opts.AuthToken != "" && strings.HasPrefix(opts.URL, "https://") {
+		cloneURL = strings.Replace(opts.URL, "https://", fmt.Sprintf("https://oauth2:%s@", opts.AuthToken), 1)
+	}
+
+	branch := opts.Branch
+	if branch == "" {
+		branch = "main"
+	}
+	if err := validateRef(branch); err != nil {
+		return nil, fmt.Errorf("git sync: %w", err)
+	}
+
+	var progress io.Writer = io.Discard
+	if opts.Progress != nil {
+		if opts.AuthToken != "" {
+			progress = &maskWriter{w: opts.Progress, secret: opts.AuthToken}
+		} else {
+			progress = opts.Progress
+		}
+	}
+
+	runGit := func(args ...string) error {
+		cmd := exec.CommandContext(syncCtx, "git", append([]string{"-C", opts.TargetDir}, args...)...)
+		cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+		if sshKeyPath != "" {
+			cmd.Env = append(cmd.Env,
+				fmt.Sprintf("GIT_SSH_COMMAND=ssh -i %s -o StrictHostKeyChecking=no -o IdentitiesOnly=yes -o BatchMode=yes", sshKeyPath),
+			)
+		}
+		cmd.Stdout = progress
+		cmd.Stderr = progress
+		return cmd.Run()
+	}
+
+	// Update remote URL
+	_ = runGit("remote", "set-url", "origin", cloneURL)
+
+	// Fetch updates fast
+	if err := runGit("fetch", "--depth", "1", "origin", branch); err != nil {
+		// If fetch fails, fallback to full fresh clone
+		_ = os.RemoveAll(opts.TargetDir)
+		return Clone(ctx, opts)
+	}
+
+	// Reset hard to origin/branch
+	if err := runGit("checkout", "-f", branch); err != nil {
+		_ = runGit("checkout", "-B", branch, "origin/"+branch)
+	}
+	if err := runGit("reset", "--hard", "origin/"+branch); err != nil {
+		return nil, fmt.Errorf("git sync reset: %w", err)
+	}
+	_ = runGit("clean", "-fd")
+
+	sha, err := revParse(ctx, opts.TargetDir, "HEAD")
+	if err != nil {
+		return nil, fmt.Errorf("git sync: get commit: %w", err)
 	}
 
 	return &CloneResult{

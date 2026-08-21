@@ -57,6 +57,16 @@ else
     log_ok "Docker detected"
 fi
 
+log_info "Detecting Git..."
+if ! command -v git >/dev/null 2>&1; then
+    log_warn "Git is not installed."
+    log_info "Installing Git..."
+    apt-get update -yqq && apt-get install -y git >/dev/null 2>&1 || log_error "Failed to install Git."
+    log_ok "Git installed"
+else
+    log_ok "Git detected"
+fi
+
 # 5. Download Binary
 REPO="nuexn0x-9/liteploy"
 DOWNLOAD_URL="https://github.com/${REPO}/releases/latest/download/liteploy-linux-${BINARY_ARCH}"

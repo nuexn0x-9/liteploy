@@ -73,7 +73,7 @@
                         <td><span class="badge-neutral">{{.TriggeredBy}}</span></td>
                         <td>
                             {{if .CommitSHA}}
-                            <code class="commit-sha">{{slice .CommitSHA 0 7}}</code>
+                            <code class="commit-sha">{{shortSHA .CommitSHA}}</code>
                             {{else}}
                             <span class="text-muted">—</span>
                             {{end}}

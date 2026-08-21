@@ -291,8 +291,10 @@ func (s *Service) runJob(j *job) {
 				dep.Status = StatusCancelled
 				now := time.Now().UTC()
 				dep.FinishedAt = &now
+				fmt.Fprintf(logFile, "\n[liteploy] [ERROR] Deployment was cancelled or timed out.\n")
 			} else {
 				dep.Fail("execute", sanitizeError(err))
+				fmt.Fprintf(logFile, "\n[liteploy] [ERROR] %s\n", dep.Error)
 			}
 			s.updateDeployment(dep)
 			s.logger.Error("deployment failed",
@@ -308,11 +310,56 @@ func (s *Service) runJob(j *job) {
 	}
 
 	s.updateDeployment(dep)
+	s.PruneOldDeployments(dep.AppID, 10)
 	s.logger.Info("deployment completed",
 		"app_id", dep.AppID,
 		"deployment_id", dep.ID,
 		"duration_s", dep.Duration,
 	)
+}
+
+// PruneOldDeployments retains only the newest maxKeep deployments for an application,
+// removing the older deployment metadata, directories, and logs from disk and memory.
+func (s *Service) PruneOldDeployments(appID string, maxKeep int) {
+	if maxKeep <= 0 {
+		return
+	}
+	deployments := s.ListByApp(appID)
+	if len(deployments) <= maxKeep {
+		return
+	}
+
+	for i := maxKeep; i < len(deployments); i++ {
+		oldDep := deployments[i]
+		s.mu.Lock()
+		delete(s.deployments, oldDep.ID)
+		s.mu.Unlock()
+
+		relDir := filepath.Join("applications", appID, "deployments", oldDep.ID)
+		if absDir, err := s.store.AbsPath(relDir); err == nil {
+			_ = os.RemoveAll(absDir)
+		}
+	}
+}
+
+// ClearFailedDeployments deletes all failed or cancelled deployments for an app.
+func (s *Service) ClearFailedDeployments(appID string) int {
+	deployments := s.ListByApp(appID)
+	deleted := 0
+	for _, dep := range deployments {
+		if dep.Status == StatusFailed || dep.Status == StatusCancelled {
+			s.mu.Lock()
+			delete(s.deployments, dep.ID)
+			s.mu.Unlock()
+
+			relDir := filepath.Join("applications", appID, "deployments", dep.ID)
+			if absDir, err := s.store.AbsPath(relDir); err == nil {
+				_ = os.RemoveAll(absDir)
+			}
+			deleted++
+		}
+	}
+	return deleted
 }
 
 // getAppLock returns the per-application mutex, creating it if needed.

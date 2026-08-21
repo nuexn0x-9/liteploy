@@ -147,6 +147,7 @@ func (s *Server) buildRouter() http.Handler {
 	mux.HandleFunc("POST /system/prune", s.authenticated(s.handleSystemPrune))
 	mux.HandleFunc("GET /applications/{id}/stats", s.authenticated(s.handleApplicationStats))
 	mux.HandleFunc("POST /applications/{id}/rollback/{depID}", s.authenticated(s.handleApplicationRollback))
+	mux.HandleFunc("POST /applications/{id}/deployments/clear-failed", s.authenticated(s.handleClearFailedDeployments))
 
 	// JSON API routes.
 	mux.HandleFunc("GET /api/applications", s.apiAuthenticated(s.handleAPIListApplications))
@@ -218,6 +219,18 @@ func templateFuncs() template.FuncMap {
 		},
 		"minus": func(a, b int) int {
 			return a - b
+		},
+		"shortSHA": func(sha string) string {
+			if len(sha) > 7 {
+				return sha[:7]
+			}
+			return sha
+		},
+		"shortID": func(id string) string {
+			if len(id) > 10 {
+				return id[:10]
+			}
+			return id
 		},
 	}
 }

@@ -528,3 +528,13 @@ func (s *Server) handleApplicationRollback(w http.ResponseWriter, r *http.Reques
 	}
 	http.Redirect(w, r, "/deployments", http.StatusFound)
 }
+
+func (s *Server) handleClearFailedDeployments(w http.ResponseWriter, r *http.Request) {
+	session := sessionFromContext(r.Context())
+	if !s.requireCSRF(w, r, session) {
+		return
+	}
+	appID := r.PathValue("id")
+	s.depSvc.ClearFailedDeployments(appID)
+	http.Redirect(w, r, "/applications/"+appID, http.StatusFound)
+}
