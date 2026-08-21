@@ -16,6 +16,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -63,7 +64,7 @@ func EnsureCaddyContainer(ctx context.Context, dockerCli docker.Engine, dataDir 
 		return fmt.Errorf("proxy: ensure %s network: %w", LiteployNetwork, err)
 	}
 
-	// 2. Check if liteploy-caddy is already running.
+	// 2. Check if liteploy-caddy exists. If not responding, recreate cleanly.
 	containers, err := dockerCli.ListContainers(ctx, docker.ListContainersOptions{
 		All:    true,
 		Labels: map[string]string{"managed-by": "liteploy", "liteploy.role": "caddy"},
@@ -73,35 +74,40 @@ func EnsureCaddyContainer(ctx context.Context, dockerCli docker.Engine, dataDir 
 	}
 	for _, c := range containers {
 		if c.Status == "running" {
-			return nil // Already running — nothing to do.
+			// Check if Admin API is responsive on 127.0.0.1:2019
+			testMgr := NewManager("http://127.0.0.1:2019", slog.Default())
+			if testMgr.Ping(ctx) == nil {
+				return nil // Already running and healthy
+			}
+			// Admin not responsive — remove and recreate with proper config
+			_ = dockerCli.StopContainer(ctx, c.ID, 2)
+			_ = dockerCli.RemoveContainer(ctx, c.ID, true)
+			break
 		}
-		// Exists but not running — start it.
-		if err := dockerCli.StartContainer(ctx, c.ID); err != nil {
-			return fmt.Errorf("proxy: start existing caddy container: %w", err)
-		}
-		return nil
+		// Exists but not running — remove so we can recreate fresh
+		_ = dockerCli.RemoveContainer(ctx, c.ID, true)
 	}
 
 	// 3. Pull the Caddy image (may already be cached).
 	if err := dockerCli.PullImage(ctx, CaddyImage, io.Discard); err != nil {
-		// Non-fatal: if already pulled, this is a no-op for most implementations.
-		// If it truly fails and the image is absent, ContainerCreate will fail below.
 		slog.Default().Warn("proxy: caddy image pull warning", "error", err)
 	}
 
-	// 4. Persistent data directory for TLS certificates.
+	// 4. Persistent data directory for TLS certificates and initial config.
 	caddyDataDir := filepath.Join(dataDir, "caddy")
+	_ = os.MkdirAll(caddyDataDir, 0755)
+
+	initCfgFile := filepath.Join(caddyDataDir, "config.json")
+	if _, err := os.Stat(initCfgFile); os.IsNotExist(err) {
+		initJSON := `{"admin":{"listen":"0.0.0.0:2019"}}`
+		_ = os.WriteFile(initCfgFile, []byte(initJSON), 0644)
+	}
 
 	// 5. Create the liteploy-caddy container.
 	_, err = dockerCli.CreateContainer(ctx, docker.ContainerSpec{
 		Name:  CaddyContainerName,
 		Image: CaddyImage,
-		// Run caddy with admin API bound to all interfaces inside the container.
-		// The admin port (2019) is only published to 127.0.0.1 on the host.
-		Cmd: []string{"caddy", "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"},
-		Env: []string{
-			"CADDY_ADMIN=0.0.0.0:2019",
-		},
+		Cmd:   []string{"caddy", "run", "--config", "/data/config.json", "--adapter", "json"},
 		Labels: map[string]string{
 			"managed-by":    "liteploy",
 			"liteploy.role": "caddy",
@@ -109,11 +115,10 @@ func EnsureCaddyContainer(ctx context.Context, dockerCli docker.Engine, dataDir 
 		Binds: []string{
 			caddyDataDir + ":/data",
 		},
-		// No primary ContainerPort — all ports via ExtraPorts.
+		// Publish HTTP/HTTPS to all host interfaces, and Admin API strictly to 127.0.0.1
 		ExtraPorts: []docker.ExtraPortBinding{
 			{ContainerPort: 80, HostPort: 80, HostIP: "0.0.0.0"},
 			{ContainerPort: 443, HostPort: 443, HostIP: "0.0.0.0"},
-			// Admin API published only to localhost so Liteploy (on host) can manage Caddy.
 			{ContainerPort: 2019, HostPort: 2019, HostIP: "127.0.0.1"},
 		},
 		NetworkName:   LiteployNetwork,
@@ -125,6 +130,15 @@ func EnsureCaddyContainer(ctx context.Context, dockerCli docker.Engine, dataDir 
 
 	if err := dockerCli.StartContainer(ctx, CaddyContainerName); err != nil {
 		return fmt.Errorf("proxy: start caddy container: %w", err)
+	}
+
+	// Wait up to 5 seconds for Caddy Admin API to be ready
+	for i := 0; i < 10; i++ {
+		time.Sleep(500 * time.Millisecond)
+		testMgr := NewManager("http://127.0.0.1:2019", slog.Default())
+		if testMgr.Ping(ctx) == nil {
+			break
+		}
 	}
 
 	return nil
@@ -306,6 +320,9 @@ func (m *Manager) buildCaddyConfig() map[string]any {
 	}
 
 	return map[string]any{
+		"admin": map[string]any{
+			"listen": "0.0.0.0:2019",
+		},
 		"apps": map[string]any{
 			"http": map[string]any{
 				"servers": map[string]any{

@@ -64,6 +64,9 @@ type Engine interface {
 	// EnsureNetwork creates the network if it does not exist, returns network ID.
 	EnsureNetwork(ctx context.Context, name string) (string, error)
 
+	// ConnectNetwork connects a running container to a network with optional aliases.
+	ConnectNetwork(ctx context.Context, netName, containerID string, aliases []string) error
+
 	// RemoveNetwork removes a Docker network.
 	RemoveNetwork(ctx context.Context, id string) error
 
@@ -576,6 +579,23 @@ func (c *Client) ListNetworks(ctx context.Context, name string) ([]NetworkSummar
 func (c *Client) RemoveNetwork(ctx context.Context, id string) error {
 	if err := c.cli.NetworkRemove(ctx, id); err != nil {
 		return fmt.Errorf("docker rm network %s: %w", id, err)
+	}
+	return nil
+}
+
+// ConnectNetwork connects a running container to a network with optional aliases.
+func (c *Client) ConnectNetwork(ctx context.Context, netName, containerID string, aliases []string) error {
+	var eps *network.EndpointSettings
+	if len(aliases) > 0 {
+		eps = &network.EndpointSettings{Aliases: aliases}
+	}
+	if err := c.cli.NetworkConnect(ctx, netName, containerID, eps); err != nil {
+		// Ignore error if already connected
+		if strings.Contains(strings.ToLower(err.Error()), "already exists") ||
+			strings.Contains(strings.ToLower(err.Error()), "already connected") {
+			return nil
+		}
+		return fmt.Errorf("docker connect network %s to %s: %w", netName, containerID, err)
 	}
 	return nil
 }

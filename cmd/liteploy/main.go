@@ -192,6 +192,11 @@ func main() {
 	// Synchronize routing state to proxy on boot using stable Docker DNS aliases.
 	for _, app := range appSvc.List() {
 		if app.Status == application.StatusRunning && len(app.Domains) > 0 && app.Port > 0 {
+			if app.ContainerID != "" && dockerClient != nil {
+				// Ensure existing container is attached to liteploy-network with its stable alias
+				alias := fmt.Sprintf("liteploy-%s", app.ID)
+				_ = dockerClient.ConnectNetwork(context.Background(), proxy.LiteployNetwork, app.ContainerID, []string{alias})
+			}
 			// liteploy-{appID} is the stable Docker DNS alias set on each container.
 			upstream := fmt.Sprintf("liteploy-%s:%d", app.ID, app.Port)
 			_ = proxyMgr.UpsertRoute(context.Background(), &proxy.Route{
