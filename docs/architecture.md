@@ -27,3 +27,12 @@ To maintain an idle memory footprint of **~18.5 MB RAM**:
 - **No Redis / RabbitMQ:** Replaced by bounded in-process Go channels (`chan *job`).
 - **No Heavy SPA Bundles:** Replaced by server-rendered HTML templates + HTMX.
 - **No External CLI Executables:** Direct API communication with Docker Engine SDK and Caddy Admin API.
+
+---
+
+## ?? Internal Docker Networking
+
+LITEPLOY abstracts Docker networking by placing all managed containers inside a single, isolated Docker bridge network named liteploy-net.
+Containers are automatically named based on their Application ID (e.g., liteploy-xyz123).
+
+This architecture seamlessly enables **Multi-Tier Application Communication** without exposing internal ports to the public internet. For example, your backend container can communicate directly with your database container simply by using the database's internal DNS hostname (e.g., postgres://user:pass@liteploy-database-app:5432).

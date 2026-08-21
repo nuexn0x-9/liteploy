@@ -57,35 +57,39 @@ Traditional self-hosted deployment panels often ship with PostgreSQL, Redis, bac
                                +----------------------------------+
 ```
 
----
-
-## ✨ Key Features
+## 🚀 Key Features
 
 - **⚡ Lightweight Footprint:** Observed idle memory footprint of **~18.5 MB RSS** in internal testing.
-- **📦 Dual Workload Sources:** Deploy directly from Git repositories (GitHub, GitLab, Gitea) or Docker image registries (Docker Hub, GHCR, Private Registries).
-- **🔒 Private Repository Authentication:** Full support for Personal Access Tokens (PAT) and SSH Private Keys (Deploy Keys) with automatic log secret redaction.
-- **🌐 Domain Management & Automatic HTTPS:** Easily map custom domains (`app.yourdomain.com`). Caddy automatically issues Let's Encrypt / ZeroSSL TLS certificates.
-- **🔐 Secret & Environment Manager:** Interactive `.env` key-value editor with secret masking (`👁`/`🔒`) and raw file importer.
-- **🚀 Realtime Log Streaming:** Live SSE (Server-Sent Events) build log tailing and runtime stdout/stderr log streaming.
-- **🔗 Automated Webhooks:** Automatic deployment triggers on `git push` with HMAC-SHA256 signature verification.
-- **🛡️ Built-in Security:** HMAC-SHA256 cookie session auth, CSRF token validation, bcrypt password hashing, and command-injection-free execution.
-- **🔄 Automatic Startup Recovery:** Reconciles container states automatically if the VPS reboots or the server restarts.
+- **🎨 Retro 8-bit Console UI:** A fast, responsive, game-inspired HTMX control panel with mobile sidebar support.
+- **📦 Zero-Downtime HTTP Healthchecks:** Validates container HTTP endpoints before switching traffic.
+- **♻️ 1-Click Rollbacks:** Instantly revert to a previous successful image deployment in seconds.
+- **📈 Live Container Metrics:** Real-time CPU and RAM monitoring straight from Docker Stats API.
+- **🧹 System Auto-Prune:** Built-in garbage collection to keep your $5 VPS disk clean.
+- **🗄️ Persistent Volumes:** Map host directories to containers to ensure database/state survival.
+- **🔄 Dual Workload Sources:** Deploy directly from Git repositories or Docker image registries.
+- **🔑 Private Repository Authentication:** Support for Personal Access Tokens (PAT) and SSH Private Keys.
+- **🌐 Domain Management & Automatic HTTPS:** Easily map custom domains. Caddy automatically issues Let's Encrypt / ZeroSSL TLS certificates.
+- **🔒 Secret & Environment Manager:** Interactive `.env` key-value editor with secret masking.
+- **📡 Realtime Log Streaming:** Live SSE build log tailing and runtime stdout/stderr streaming.
+- **🔗 Automated Webhooks:** Automatic deployment triggers on `git push` with HMAC-SHA256 signatures.
+- **🛡️ Built-in Security:** HMAC-SHA256 cookie session auth, CSRF token validation, bcrypt password hashing.
+- **🔧 Automatic Startup Recovery:** Reconciles container states and proxy routes automatically on VPS reboot.
 
 ---
 
-## 💡 Resource Philosophy
+## 💾 Resource Philosophy
 
 LITEPLOY is designed with strict resource constraints:
 
 - **Observed Idle RSS:** ~18.5 MB RAM *(measured in internal baseline testing)*
 - **Target Active Peak:** < 50 MB RAM
-- **Build Concurrency:** Bounded worker queue (default 1 concurrent build) to prevent RAM exhaustion during Docker builds.
+- **Build Concurrency:** Bounded worker queue (default 1 concurrent build) to prevent RAM exhaustion.
 
 > **Note:** While LITEPLOY itself consumes minimal RAM, application workloads (e.g. Node.js apps, Docker build steps, database containers) consume host memory independently. Always size container RAM limits accordingly.
 
 ---
 
-## 🖥️ Supported Environments
+## 🌍 Supported Environments
 
 - **Operating Systems:** Linux (Ubuntu 20.04/22.04/24.04, Debian 11/12, CentOS/Rocky Linux 9, Alpine Linux 3.18+)
 - **Architectures:** `amd64` (x86_64), `arm64` (aarch64)
@@ -113,9 +117,9 @@ The installer automatically:
 
 1. **Access the Dashboard:** Open `http://<your-vps-ip>:8080` in your browser.
 2. **Initial Setup:** On first launch, create your administrator credentials.
-3. **Create Application:** Click **+ New Application**, enter a name, and select your workload source (Git URL or Docker Image).
-4. **Configure & Deploy:** Set container port (e.g. `3000`), add your environment variables, and click **🚀 Deploy Now**.
-5. **Add Custom Domain:** Under the application's **Domains** card, add `app.yourdomain.com` to enable automatic Caddy HTTPS routing.
+3. **Create Application:** Click **+ New Application**, enter a name, and select workload source.
+4. **Configure & Deploy:** Set container port (e.g. `3000`), map Persistent Volumes, set a Healthcheck Path, and click **🚀 Deploy Now**.
+5. **Add Custom Domain:** Under the application's **Domains** card, add `app.yourdomain.com` to enable automatic HTTPS routing.
 
 ---
 
@@ -125,11 +129,13 @@ Comprehensive documentation is available in the [`docs/`](docs/) directory:
 
 - [Installation Guide](docs/installation.md)
 - [Quick Start Walkthrough](docs/quick-start.md)
+- [Tutorial: Deploying a Multi-Tier App (Frontend + Backend + DB)](docs/tutorials/multi-tier-deployment.md)
 - [System & VPS Requirements](docs/requirements.md)
 - [Configuration Reference](docs/configuration.md)
 - [Managing Applications](docs/applications.md)
 - [Git & Private Repositories](docs/git-deployment.md)
 - [Docker Image Registries](docs/docker-images.md)
+- [Persistent Volumes](docs/features/volumes.md)
 - [Environment Variables & Secrets](docs/environment-variables.md)
 - [Custom Domains & HTTPS](docs/domains.md)
 - [Realtime Logs & SSE](docs/logs.md)

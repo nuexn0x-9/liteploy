@@ -8,6 +8,7 @@ Welcome to the official LITEPLOY documentation! This manual is structured for bo
 
 - **[Installation Guide](installation.md)** — Step-by-step VPS installation instructions using the one-command installer or manual binaries.
 - **[Quick Start Walkthrough](quick-start.md)** — Step-by-step tutorial from clean VPS to your first deployed application with custom domains and HTTPS.
+- **[Tutorial: Deploying a Multi-Tier App](tutorials/multi-tier-deployment.md)** — How to deploy a Database, Backend, and Frontend that communicate securely.
 - **[System & VPS Requirements](requirements.md)** — RAM, CPU, disk, and OS compatibility matrix for $5/month VPS hosting.
 
 ---
@@ -27,6 +28,7 @@ Welcome to the official LITEPLOY documentation! This manual is structured for bo
 - **[Application Management](applications.md)** — Creating, editing, and deleting applications.
 - **[Git & Private Repositories](git-deployment.md)** — Deploying from GitHub, GitLab, or Gitea using PAT tokens or SSH Deploy Keys.
 - **[Docker Image Registries](docker-images.md)** — Deploying pre-built images from Docker Hub, GHCR, or private registries.
+- **[Persistent Volumes](features/volumes.md)** — Mapping host paths to containers for databases and persistent storage.
 - **[Environment Variables & Secrets](environment-variables.md)** — Injecting `.env` key-value pairs and raw env files with secret masking.
 - **[Custom Domains & HTTPS](domains.md)** — Mapping custom domains with automated Caddy SSL certificates.
 - **[Realtime Logs & SSE](logs.md)** — Tailing live build logs and container runtime outputs.
