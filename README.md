@@ -61,18 +61,20 @@ Traditional self-hosted deployment panels often ship with PostgreSQL, Redis, bac
 
 - **⚡ Lightweight Footprint:** Observed idle memory footprint of **~18.5 MB RSS** in internal testing.
 - **🎨 Retro 8-bit Console UI:** A fast, responsive, game-inspired HTMX control panel with mobile sidebar support.
+- **🌐 Primary Domain & Wildcard Subdomains:** Set your root domain once (`example.com`), route your dashboard to `liteploy.example.com`, and deploy applications to any subdomain (`app.example.com`, `api.example.com`) instantly with automatic Caddy TLS.
+- **🧙‍♂️ Initial Setup Wizard:** Guided 2-step onboarding to create admin credentials and configure wildcard DNS with 1-click DNS verification.
 - **📦 Zero-Downtime HTTP Healthchecks:** Validates container HTTP endpoints before switching traffic.
 - **♻️ 1-Click Rollbacks:** Instantly revert to a previous successful image deployment in seconds.
+- **💾 1-Click Backup & VPS Migration:** Export and import full platform state as a portable `.tar.gz` archive.
 - **📈 Live Container Metrics:** Real-time CPU and RAM monitoring straight from Docker Stats API.
-- **🧹 System Auto-Prune:** Built-in garbage collection to keep your $5 VPS disk clean.
+- **🧹 System Auto-Prune & Retention:** Built-in garbage collection and automatic pruning of old/failed deployment logs.
 - **🗄️ Persistent Volumes:** Map host directories to containers to ensure database/state survival.
-- **🔄 Dual Workload Sources:** Deploy directly from Git repositories or Docker image registries.
+- **🔄 Dual Workload Sources:** Deploy directly from Git repositories (with persistent fetch cache) or Docker image registries.
 - **🔑 Private Repository Authentication:** Support for Personal Access Tokens (PAT) and SSH Private Keys.
-- **🌐 Domain Management & Automatic HTTPS:** Easily map custom domains. Caddy automatically issues Let's Encrypt / ZeroSSL TLS certificates.
 - **🔒 Secret & Environment Manager:** Interactive `.env` key-value editor with secret masking.
 - **📡 Realtime Log Streaming:** Live SSE build log tailing and runtime stdout/stderr streaming.
 - **🔗 Automated Webhooks:** Automatic deployment triggers on `git push` with HMAC-SHA256 signatures.
-- **🛡️ Built-in Security:** HMAC-SHA256 cookie session auth, CSRF token validation, bcrypt password hashing.
+- **🛡️ Hardened Security:** Cryptographic session secrets, `/etc/liteploy/liteploy.env` with `0600` permissions, CSRF tokens, bcrypt password hashing.
 - **🔧 Automatic Startup Recovery:** Reconciles container states and proxy routes automatically on VPS reboot.
 
 ---
@@ -102,24 +104,28 @@ LITEPLOY is designed with strict resource constraints:
 Run the official one-command installer on a clean Linux VPS (requires root or `sudo` privileges):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/nuexn0x-9/liteploy/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/nuexn0x-9/liteploy/main/scripts/install.sh | sudo bash
 ```
 
 The installer automatically:
 1. Detects your CPU architecture (`amd64` or `arm64`).
-2. Verifies Docker availability.
-3. Installs the compiled binary to `/usr/local/bin/liteploy`.
-4. Creates and starts the Systemd service (`liteploy.service`).
+2. Verifies Docker and Git availability.
+3. Generates a secure cryptographic session secret in `/etc/liteploy/liteploy.env` (`chmod 600`).
+4. Installs the compiled binary to `/usr/local/bin/liteploy`.
+5. Configures and starts the Systemd service (`liteploy.service`).
+6. Executes strict health-check polling before confirming installation success.
 
 ---
 
 ## 🚀 Quick Start Guide
 
-1. **Access the Dashboard:** Open `http://<your-vps-ip>:8080` in your browser.
-2. **Initial Setup:** On first launch, create your administrator credentials.
-3. **Create Application:** Click **+ New Application**, enter a name, and select workload source.
-4. **Configure & Deploy:** Set container port (e.g. `3000`), map Persistent Volumes, set a Healthcheck Path, and click **🚀 Deploy Now**.
-5. **Add Custom Domain:** Under the application's **Domains** card, add `app.yourdomain.com` to enable automatic HTTPS routing.
+1. **Access Dashboard:** Open `http://<your-vps-ip>:8080` in your browser.
+2. **Initial Setup Wizard:**
+   - **Step 1:** Create your administrator credentials.
+   - **Step 2:** Enter your **Primary Domain** (e.g. `example.com`), point your DNS `A` records (`@` and `*` to VPS IP), and click **[ Verify DNS & Enable HTTPS ]** (or click *Skip for now*).
+3. **Secure Access:** Access your dashboard securely at `https://liteploy.example.com`.
+4. **Deploy Application:** Click **+ New Application**, enter a name, specify your port (e.g. `3000`), map persistent volumes if needed, and click **[ Deploy Now ]**.
+5. **Add Subdomain:** Add `app.example.com` or `api.example.com` under Domains to instantly get automatic HTTPS routing.
 
 ---
 

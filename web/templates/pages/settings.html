@@ -48,10 +48,115 @@
         {{end}}
 
         {{if .Success}}
-        <div class="alert alert-success">[ OK ] ACCESS CODE UPDATED SUCCESSFULLY.</div>
+        <div class="alert alert-success">[ OK ] CONFIGURATION UPDATED SUCCESSFULLY.</div>
+        {{end}}
+
+        {{if eq .Msg "domain_updated"}}
+        <div class="alert alert-success">[ OK ] PRIMARY DOMAIN UPDATED.</div>
+        {{else if eq .Msg "dns_verified"}}
+        <div class="alert alert-success">[ OK ] DNS VERIFIED &amp; HTTPS ROUTE CONFIGURED.</div>
+        {{else if eq .Msg "https_toggled"}}
+        <div class="alert alert-success">[ OK ] HTTPS CONFIGURATION TOGGLED.</div>
         {{end}}
 
         <div class="grid-2col">
+            <!-- Primary Domain & Wildcard DNS -->
+            <section class="card" style="grid-column: 1 / -1;">
+                <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                    <h2><span class="card-icon">◉</span> PRIMARY DOMAIN &amp; WILDCARD DNS</h2>
+                    <div>
+                        {{if .Settings.PrimaryDomain}}
+                            {{if .Settings.DNSVerified}}
+                                <span class="status-badge status-running" style="font-size: 0.35rem;">DNS VERIFIED</span>
+                            {{else}}
+                                <span class="status-badge status-failed" style="font-size: 0.35rem;">DNS UNVERIFIED</span>
+                            {{end}}
+                            {{if .Settings.HTTPSEnabled}}
+                                <span class="status-badge status-running" style="font-size: 0.35rem; margin-left: 5px;">HTTPS ACTIVE</span>
+                            {{else}}
+                                <span class="status-badge status-failed" style="font-size: 0.35rem; margin-left: 5px;">HTTPS INACTIVE</span>
+                            {{end}}
+                        {{else}}
+                            <span class="badge-neutral" style="font-size: 0.35rem;">NOT CONFIGURED</span>
+                        {{end}}
+                    </div>
+                </div>
+                <div style="padding: 1rem 0;">
+                    <p class="text-muted" style="margin-bottom: 1rem;">
+                        Configuring a primary domain enables automatic dashboard hostname (<code>liteploy.&lt;domain&gt;</code>), wildcard subdomain routing (e.g. <code>app.&lt;domain&gt;</code>, <code>api.&lt;domain&gt;</code>), and automatic TLS/HTTPS certificates via Caddy.
+                    </p>
+
+                    <div class="grid-2col" style="gap: 1.5rem; align-items: start;">
+                        <div>
+                            <form method="POST" action="/settings/domains/primary">
+                                <input type="hidden" name="_csrf" value="{{if .Session}}{{.Session.CSRFToken}}{{end}}">
+                                <div class="form-group">
+                                    <label for="primary_domain">PRIMARY DOMAIN</label>
+                                    <input type="text" id="primary_domain" name="primary_domain" value="{{.Settings.PrimaryDomain}}" placeholder="example.com" autocomplete="off">
+                                    <small>e.g. <code>example.com</code> or <code>mycompany.id</code>. Do not include http://</small>
+                                </div>
+                                <div style="display: flex; gap: 8px;">
+                                    <button type="submit" class="btn btn-primary">[ SAVE DOMAIN ]</button>
+                                </div>
+                            </form>
+
+                            {{if .Settings.PrimaryDomain}}
+                            <div style="display: flex; gap: 8px; margin-top: 1rem;">
+                                <form method="POST" action="/settings/domains/verify" style="display:inline;">
+                                    <input type="hidden" name="_csrf" value="{{if .Session}}{{.Session.CSRFToken}}{{end}}">
+                                    <button type="submit" class="btn btn-sm btn-secondary">[ VERIFY DNS ]</button>
+                                </form>
+                                <form method="POST" action="/settings/domains/https" style="display:inline;">
+                                    <input type="hidden" name="_csrf" value="{{if .Session}}{{.Session.CSRFToken}}{{end}}">
+                                    {{if .Settings.HTTPSEnabled}}
+                                    <button type="submit" class="btn btn-sm btn-secondary" style="color: var(--rp-warning);">[ DISABLE HTTPS ]</button>
+                                    {{else}}
+                                    <button type="submit" class="btn btn-sm btn-primary">[ ENABLE HTTPS ]</button>
+                                    {{end}}
+                                </form>
+                            </div>
+                            {{end}}
+                        </div>
+
+                        <div style="background: var(--rp-surface); border: 2px solid var(--rp-surface2); padding: 1rem;">
+                            <div style="font-family: var(--font-pixel); font-size: 0.42rem; color: var(--rp-primary); margin-bottom: 0.5rem;">
+                                WILDCARD DNS CONFIGURATION
+                            </div>
+                            <p class="text-xs text-muted" style="margin-bottom: 0.5rem;">
+                                Point these DNS records to your server IP (<code>{{.ServerIP}}</code>):
+                            </p>
+                            <table class="table" style="margin: 0; background: transparent; font-size: 0.85rem;">
+                                <thead>
+                                    <tr>
+                                        <th>TYPE</th>
+                                        <th>NAME</th>
+                                        <th>TARGET IP</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td><code>A</code></td>
+                                        <td><code>@</code></td>
+                                        <td><strong style="color: var(--rp-success);">{{.ServerIP}}</strong></td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>A</code></td>
+                                        <td><code>*</code></td>
+                                        <td><strong style="color: var(--rp-success);">{{.ServerIP}}</strong></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                            {{if .Settings.DashboardDomain}}
+                            <div style="margin-top: 0.75rem; padding-top: 0.5rem; border-top: 1px dashed var(--rp-surface2); font-size: 0.85rem;">
+                                <strong>DASHBOARD HOSTNAME:</strong><br>
+                                <a href="https://{{.Settings.DashboardDomain}}" target="_blank" rel="noopener noreferrer" class="domain-link" style="color: var(--rp-primary); font-weight: bold;">https://{{.Settings.DashboardDomain}}</a>
+                            </div>
+                            {{end}}
+                        </div>
+                    </div>
+                </div>
+            </section>
+
             <!-- Authentication / Password -->
             <section class="card">
                 <div class="card-header">

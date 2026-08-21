@@ -16,6 +16,7 @@ import (
 	"github.com/liteploy/liteploy/internal/deployment"
 	"github.com/liteploy/liteploy/internal/proxy"
 	"github.com/liteploy/liteploy/internal/storage"
+	"github.com/liteploy/liteploy/internal/system"
 )
 
 func setupTestServer(t *testing.T) (*httptest.Server, *storage.Store) {
@@ -30,13 +31,13 @@ func setupTestServer(t *testing.T) (*httptest.Server, *storage.Store) {
 	cfg := &config.Config{
 		HTTPAddr:                 ":0",
 		DataDir:                  dataDir,
-		LogLevel:                 "debug",
-		SessionSecret:            "12345678901234567890123456789012",
-		SessionMaxAge:            time.Hour,
+		LogLevel:                 "error",
+		SessionSecret:            "test-secret-at-least-32-bytes-long!!",
+		SessionMaxAge:            24 * time.Hour,
 		MaxConcurrentDeployments: 1,
-		DeploymentTimeout:        5 * time.Minute,
-		HealthCheckTimeout:       30 * time.Second,
-		GitTimeout:               2 * time.Minute,
+		DeploymentTimeout:        1 * time.Minute,
+		HealthCheckTimeout:       10 * time.Second,
+		GitTimeout:               1 * time.Minute,
 		DevMode:                  true,
 	}
 
@@ -55,13 +56,19 @@ func setupTestServer(t *testing.T) (*httptest.Server, *storage.Store) {
 		t.Fatalf("application.NewService: %v", err)
 	}
 
+	settingsSvc, err := system.NewSettingsService(store)
+	if err != nil {
+		t.Fatalf("system.NewSettingsService: %v", err)
+	}
+	_ = settingsSvc.SkipSetup()
+
 	proxyMgr := proxy.NewManager("http://127.0.0.1:2019", nil)
 	depSvc, err := deployment.NewService(store, nil, nil, 1)
 	if err != nil {
 		t.Fatalf("deployment.NewService: %v", err)
 	}
 
-	srv, err := api.NewServer(cfg, nil, appSvc, depSvc, authSvc, userStore, proxyMgr, nil)
+	srv, err := api.NewServer(cfg, nil, appSvc, depSvc, authSvc, userStore, settingsSvc, proxyMgr, nil)
 	if err != nil {
 		t.Fatalf("api.NewServer: %v", err)
 	}

@@ -22,6 +22,7 @@ import (
 	"github.com/liteploy/liteploy/internal/deployment"
 	"github.com/liteploy/liteploy/internal/docker"
 	"github.com/liteploy/liteploy/internal/proxy"
+	"github.com/liteploy/liteploy/internal/system"
 	"github.com/liteploy/liteploy/web"
 )
 
@@ -33,6 +34,7 @@ type Server struct {
 	depSvc         *deployment.Service
 	authSvc        *auth.Service
 	userStore      *auth.UserStore
+	settingsSvc    *system.SettingsService
 	proxyMgr       *proxy.Manager
 	dockerCli      docker.Engine
 	templates      *template.Template
@@ -48,6 +50,7 @@ func NewServer(
 	depSvc *deployment.Service,
 	authSvc *auth.Service,
 	userStore *auth.UserStore,
+	settingsSvc *system.SettingsService,
 	proxyMgr *proxy.Manager,
 	dockerCli docker.Engine,
 ) (*Server, error) {
@@ -55,14 +58,15 @@ func NewServer(
 		logger = slog.Default()
 	}
 	s := &Server{
-		cfg:       cfg,
-		logger:    logger,
-		appSvc:    appSvc,
-		depSvc:    depSvc,
-		authSvc:   authSvc,
-		userStore: userStore,
-		proxyMgr:  proxyMgr,
-		dockerCli: dockerCli,
+		cfg:         cfg,
+		logger:      logger,
+		appSvc:      appSvc,
+		depSvc:      depSvc,
+		authSvc:     authSvc,
+		userStore:   userStore,
+		settingsSvc: settingsSvc,
+		proxyMgr:    proxyMgr,
+		dockerCli:   dockerCli,
 	}
 
 	tmpl, err := s.loadTemplates()
@@ -123,6 +127,14 @@ func (s *Server) buildRouter() http.Handler {
 	mux.HandleFunc("GET /setup", s.handleSetupPage)
 	mux.HandleFunc("POST /setup", s.handleSetupSubmit)
 
+	// Domain Setup Wizard routes (authenticated).
+	mux.HandleFunc("GET /setup/domain", s.authenticated(s.handleSetupDomainPage))
+	mux.HandleFunc("POST /setup/domain", s.authenticated(s.handleSetupDomainSubmit))
+	mux.HandleFunc("GET /setup/domain/dns", s.authenticated(s.handleSetupDomainDNSPage))
+	mux.HandleFunc("POST /setup/domain/verify", s.authenticated(s.handleSetupDomainVerify))
+	mux.HandleFunc("POST /setup/domain/skip", s.authenticated(s.handleSetupDomainSkip))
+	mux.HandleFunc("GET /setup/domain/success", s.authenticated(s.handleSetupDomainSuccessPage))
+
 	// HTML UI routes (authenticated).
 	mux.HandleFunc("GET /{$}", s.authenticated(s.handleDashboard))
 	mux.HandleFunc("GET /applications", s.authenticated(s.handleApplicationsList))
@@ -143,6 +155,10 @@ func (s *Server) buildRouter() http.Handler {
 	mux.HandleFunc("GET /deployments/{id}", s.authenticated(s.handleDeploymentDetail))
 	mux.HandleFunc("GET /domains", s.authenticated(s.handleDomainsList))
 	mux.HandleFunc("GET /settings", s.authenticated(s.handleSettingsPage))
+	mux.HandleFunc("GET /settings/domains", s.authenticated(s.handleSettingsPage))
+	mux.HandleFunc("POST /settings/domains/primary", s.authenticated(s.handleSettingsUpdatePrimaryDomain))
+	mux.HandleFunc("POST /settings/domains/verify", s.authenticated(s.handleSettingsVerifyDomain))
+	mux.HandleFunc("POST /settings/domains/https", s.authenticated(s.handleSettingsToggleHTTPS))
 	mux.HandleFunc("POST /settings/password", s.authenticated(s.handleSettingsChangePassword))
 	mux.HandleFunc("POST /system/prune", s.authenticated(s.handleSystemPrune))
 	mux.HandleFunc("GET /settings/backup/export", s.authenticated(s.handleBackupExport))

@@ -9,15 +9,25 @@ import (
 
 	"github.com/liteploy/liteploy/internal/application"
 	"github.com/liteploy/liteploy/internal/storage"
+	"github.com/liteploy/liteploy/internal/system"
 )
 
 // --- HTML Application Handlers ---
 
 func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
+	if s.settingsSvc != nil {
+		settings := s.settingsSvc.Get()
+		if settings.PrimaryDomain == "" && !settings.SetupSkipped {
+			http.Redirect(w, r, "/setup/domain", http.StatusFound)
+			return
+		}
+	}
+
 	apps := s.appSvc.List()
 	s.renderPage(w, r, "dashboard.html", map[string]any{
-		"Apps":    apps,
-		"Session": sessionFromContext(r.Context()),
+		"Apps":     apps,
+		"Settings": s.settingsSvc.Get(),
+		"Session":  sessionFromContext(r.Context()),
 	})
 }
 
@@ -365,8 +375,25 @@ func (s *Server) handleDeploymentDetail(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *Server) handleSettingsPage(w http.ResponseWriter, r *http.Request) {
+	settings := s.settingsSvc.Get()
+	serverIP := settings.ServerIP
+	if serverIP == "" {
+		serverIP = system.GetServerPublicIP(r.Context())
+		if serverIP == "" {
+			serverIP = r.Host
+			if strings.Contains(serverIP, ":") {
+				serverIP = strings.Split(serverIP, ":")[0]
+			}
+		}
+	}
+
 	s.renderPage(w, r, "settings.html", map[string]any{
-		"Session": sessionFromContext(r.Context()),
+		"Settings": settings,
+		"ServerIP": serverIP,
+		"Error":    r.URL.Query().Get("error"),
+		"Success":  r.URL.Query().Get("msg") == "success" || r.URL.Query().Get("success") != "",
+		"Msg":      r.URL.Query().Get("msg"),
+		"Session":  sessionFromContext(r.Context()),
 	})
 }
 

@@ -19,6 +19,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -163,8 +164,15 @@ func main() {
 		return app.WebhookSecret, true
 	})
 
+	// Initialize settings service.
+	settingsSvc, err := system.NewSettingsService(store)
+	if err != nil {
+		logger.Error("failed to initialize settings service", "error", err)
+		os.Exit(1)
+	}
+
 	// Initialize HTTP server.
-	srv, err := api.NewServer(cfg, logger, appSvc, depSvc, authSvc, userStore, proxyMgr, dockerClient)
+	srv, err := api.NewServer(cfg, logger, appSvc, depSvc, authSvc, userStore, settingsSvc, proxyMgr, dockerClient)
 	if err != nil {
 		logger.Error("failed to initialize HTTP server", "error", err)
 		os.Exit(1)
@@ -181,6 +189,17 @@ func main() {
 			})
 		}
 	}
+
+	// Synchronize dashboard route to proxy on boot if configured.
+	sysSettings := settingsSvc.Get()
+	if sysSettings.PrimaryDomain != "" && sysSettings.DashboardDomain != "" && sysSettings.HTTPSEnabled {
+		target := cfg.HTTPAddr
+		if strings.HasPrefix(target, ":") {
+			target = "127.0.0.1" + target
+		}
+		_ = proxyMgr.SetDashboardRoute(context.Background(), sysSettings.DashboardDomain, target)
+	}
+
 	srv.SetWebhookHandler(webhookHandler)
 
 	// Perform startup state reconciliation.

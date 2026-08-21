@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LITEPLOY // DOMAIN SETUP</title>
+    <link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body class="auth-layout">
+    <div class="auth-card" style="max-width: 620px;">
+        <div class="auth-header">
+            <span class="auth-logo">LITEPLOY</span>
+            <span class="auth-subtitle">INITIAL SETUP WIZARD</span>
+            <div class="auth-status-line">STEP 2/2 — CONFIGURE PRIMARY DOMAIN</div>
+        </div>
+
+        {{if .Error}}
+        <div class="alert alert-error">{{.Error}}</div>
+        {{end}}
+
+        {{if eq .Step "dns"}}
+        <!-- Step: DNS Instructions & Verification -->
+        <div class="setup-info">
+            Point your domain DNS records to this server to activate wildcard routing and automatic HTTPS.
+        </div>
+
+        <div style="background: var(--rp-surface); border: 2px solid var(--rp-primary); padding: 1rem; margin-bottom: 1.5rem;">
+            <div style="font-family: var(--font-pixel); font-size: 0.42rem; color: var(--rp-primary); margin-bottom: 0.5rem;">
+                REQUIRED DNS RECORDS
+            </div>
+            <table class="table" style="margin: 0; background: transparent;">
+                <thead>
+                    <tr>
+                        <th>TYPE</th>
+                        <th>NAME</th>
+                        <th>VALUE (SERVER IP)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>A</code></td>
+                        <td><code>@</code></td>
+                        <td><strong style="color: var(--rp-success);">{{.ServerIP}}</strong></td>
+                    </tr>
+                    <tr>
+                        <td><code>A</code></td>
+                        <td><code>*</code></td>
+                        <td><strong style="color: var(--rp-success);">{{.ServerIP}}</strong></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="info-box" style="margin-bottom: 1.5rem;">
+            <div class="info-box-icon">◈</div>
+            <div class="info-box-content">
+                <strong>DASHBOARD TARGET:</strong> <code style="color: var(--rp-primary);">https://{{.DashboardDomain}}</code><br>
+                Once verified, Caddy will automatically issue an SSL certificate and redirect traffic to HTTPS.
+            </div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+            <form method="POST" action="/setup/domain/verify">
+                <input type="hidden" name="_csrf" value="{{if .Session}}{{.Session.CSRFToken}}{{end}}">
+                <button type="submit" class="btn btn-primary btn-full">[ VERIFY DNS &amp; ENABLE HTTPS ]</button>
+            </form>
+
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.5rem;">
+                <a href="/setup/domain" class="btn btn-sm btn-secondary">← CHANGE DOMAIN</a>
+                <form method="POST" action="/setup/domain/skip" style="display:inline;">
+                    <input type="hidden" name="_csrf" value="{{if .Session}}{{.Session.CSRFToken}}{{end}}">
+                    <button type="submit" class="btn btn-sm btn-secondary" style="color: var(--rp-muted);">SKIP FOR NOW →</button>
+                </form>
+            </div>
+        </div>
+
+        {{else if eq .Step "success"}}
+        <!-- Step: Setup Success Screen -->
+        <div style="text-align: center; padding: 1rem 0;">
+            <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🎉</div>
+            <h2 style="font-family: var(--font-pixel); font-size: 0.65rem; color: var(--rp-success); margin-bottom: 1rem;">
+                LITEPLOY IS READY!
+            </h2>
+            <p class="text-muted" style="margin-bottom: 1.5rem;">
+                Primary domain configured with wildcard routing and automatic HTTPS.
+            </p>
+
+            <div style="background: var(--rp-surface); border: 2px solid var(--rp-surface2); padding: 1rem; text-align: left; margin-bottom: 1.5rem;">
+                <dl class="info-list">
+                    <dt>PRIMARY DOMAIN</dt>
+                    <dd><strong>{{.PrimaryDomain}}</strong></dd>
+
+                    <dt>DASHBOARD</dt>
+                    <dd><a href="https://{{.DashboardDomain}}" class="domain-link" style="color: var(--rp-primary); font-weight: bold;">https://{{.DashboardDomain}}</a></dd>
+
+                    <dt>HTTPS</dt>
+                    <dd><span style="color: var(--rp-success); font-family: var(--font-pixel); font-size: 0.4rem;">✓ ENABLED</span></dd>
+
+                    <dt>DNS</dt>
+                    <dd><span style="color: var(--rp-success); font-family: var(--font-pixel); font-size: 0.4rem;">✓ VERIFIED ({{.ServerIP}})</span></dd>
+                </dl>
+            </div>
+
+            <a href="https://{{.DashboardDomain}}" class="btn btn-primary btn-full">[ OPEN SECURE DASHBOARD ]</a>
+            <div style="margin-top: 0.75rem;">
+                <a href="/" class="btn btn-sm btn-secondary">CONTINUE ON CURRENT IP</a>
+            </div>
+        </div>
+
+        {{else}}
+        <!-- Step 1: Enter Primary Domain -->
+        <div class="setup-info">
+            Welcome to LITEPLOY! Configure your primary domain to enable automatic HTTPS and easy wildcard routing for all your applications (e.g. <code>app.yourdomain.com</code>, <code>api.yourdomain.com</code>).
+        </div>
+
+        <form method="POST" action="/setup/domain" class="auth-form">
+            <input type="hidden" name="_csrf" value="{{if .Session}}{{.Session.CSRFToken}}{{end}}">
+            <div class="form-group">
+                <label for="primary_domain">PRIMARY DOMAIN</label>
+                <input type="text" id="primary_domain" name="primary_domain" required value="{{.PrimaryDomain}}" placeholder="example.com" autocomplete="off" autofocus>
+                <small>Enter your root domain (e.g. <code>example.com</code> or <code>mycompany.id</code>). Do not include http:// or ports.</small>
+            </div>
+
+            <div class="info-box" style="margin-bottom: 1rem;">
+                <div class="info-box-icon">◈</div>
+                <div class="info-box-content text-xs">
+                    Your management console will be automatically assigned to: <br>
+                    <strong style="color: var(--rp-primary);">liteploy.&lt;primary-domain&gt;</strong>
+                </div>
+            </div>
+
+            <div style="display: flex; gap: 10px; align-items: center;">
+                <button type="submit" class="btn btn-primary" style="flex: 1;">[ CONTINUE TO DNS SETUP ]</button>
+            </div>
+        </form>
+
+        <div style="text-align: center; margin-top: 1.5rem; border-top: 1px dashed var(--rp-surface2); padding-top: 1rem;">
+            <form method="POST" action="/setup/domain/skip" style="display:inline;">
+                <input type="hidden" name="_csrf" value="{{if .Session}}{{.Session.CSRFToken}}{{end}}">
+                <button type="submit" class="btn btn-sm btn-secondary" style="color: var(--rp-muted);">[ SKIP FOR NOW — USE IP ADDRESS ]</button>
+            </form>
+        </div>
+        {{end}}
+    </div>
+</body>
+</html>

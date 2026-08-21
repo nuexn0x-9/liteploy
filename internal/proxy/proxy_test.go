@@ -48,28 +48,82 @@ func TestProxyRouteGeneration(t *testing.T) {
 	}
 }
 
-func TestProxyApplyMockCaddy(t *testing.T) {
-	var receivedConfig bool
+func TestProxyDashboardRoute(t *testing.T) {
+	mgr := NewManager("http://localhost:2019", nil)
+
+	// Set dashboard domain
+	mgr.dashboardDomain = "liteploy.example.com"
+	mgr.dashboardTarget = "127.0.0.1:8080"
+
+	cfg := mgr.buildCaddyConfig()
+	apps := cfg["apps"].(map[string]any)
+	httpApp := apps["http"].(map[string]any)
+	servers := httpApp["servers"].(map[string]any)
+	liteployServer := servers["liteploy"].(map[string]any)
+	routes := liteployServer["routes"].([]map[string]any)
+
+	if len(routes) != 1 {
+		t.Fatalf("expected 1 dashboard route, got %d", len(routes))
+	}
+
+	match := routes[0]["match"].([]map[string]any)
+	hosts := match[0]["host"].([]string)
+	if len(hosts) != 1 || hosts[0] != "liteploy.example.com" {
+		t.Fatalf("unexpected host in dashboard route: %v", hosts)
+	}
+
+	if mgr.GetDashboardDomain() != "liteploy.example.com" {
+		t.Fatalf("expected liteploy.example.com, got %s", mgr.GetDashboardDomain())
+	}
+}
+
+func TestProxyRollbackOnFailure(t *testing.T) {
+	var callCount int
 	mockCaddy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/load" && r.Method == http.MethodPost {
-			receivedConfig = true
+		callCount++
+		if callCount == 1 {
+			// First call succeeds (sets lastKnownGood)
 			w.WriteHeader(http.StatusOK)
 			return
 		}
-		http.NotFound(w, r)
+		if callCount == 2 {
+			// Second call fails (triggers rollback)
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte("invalid config"))
+			return
+		}
+		if callCount == 3 {
+			// Rollback call succeeds
+			w.WriteHeader(http.StatusOK)
+			return
+		}
 	}))
 	defer mockCaddy.Close()
 
 	mgr := NewManager(mockCaddy.URL, nil)
+
+	// 1. Initial good apply
 	err := mgr.UpsertRoute(context.Background(), &Route{
 		AppID:    "app-001",
-		Domains:  []string{"test.local"},
-		Upstream: "127.0.0.1:8080",
+		Domains:  []string{"good.example.com"},
+		Upstream: "127.0.0.1:3000",
 	})
 	if err != nil {
-		t.Fatalf("UpsertRoute failed: %v", err)
+		t.Fatalf("initial route failed: %v", err)
 	}
-	if !receivedConfig {
-		t.Error("mock caddy did not receive /load request")
+
+	// 2. Second apply that fails and triggers rollback
+	err = mgr.UpsertRoute(context.Background(), &Route{
+		AppID:    "app-002",
+		Domains:  []string{"bad.example.com"},
+		Upstream: "127.0.0.1:4000",
+	})
+	if err == nil {
+		t.Fatalf("expected error from second apply, got nil")
+	}
+
+	// Verify rollback happened (total 3 calls)
+	if callCount < 3 {
+		t.Fatalf("expected at least 3 calls including rollback, got %d", callCount)
 	}
 }

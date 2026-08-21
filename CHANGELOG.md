@@ -7,15 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [Unreleased]
+## [v1.0.0] - 2026-08-21
 
 ### Added
-- Comprehensive open-source documentation suite in `docs/`.
-- Automated Linux installer script (`scripts/install.sh`).
-- Systemd service integration template (`scripts/liteploy.service`).
-- GitHub Actions CI (`ci.yml`) and Release (`release.yml`) workflows.
-- `version` and `help` CLI flags (`liteploy version`, `liteploy help`).
-- Security policy (`SECURITY.md`), contribution guide (`CONTRIBUTING.md`), and issue templates.
+- **Primary Domain & Wildcard Subdomains:** Global primary domain configuration (`example.com`) with automatic dashboard routing (`liteploy.example.com`) and wildcard subdomain hosting (`app.example.com`, `api.example.com`).
+- **Initial Setup Wizard:** Two-step guided setup for admin account creation and primary domain / wildcard DNS configuration with live DNS verification.
+- **Automated Caddy TLS & Rollback:** Automated Caddy route generation for dashboard and subdomains with automatic HTTPS certificate provisioning and instant rollback on failure.
+- **1-Click Backup & VPS Migration:** Complete export and import of application state, configs, and domains into compressed `.tar.gz` archives.
+- **Fast Git Fetch Caching:** Incremental `git fetch` caching per application repository preserving Docker build cache layers.
+- **Deployment Retention & Cleanup:** Automatic pruning of old deployment records (keeping latest 10 runs) and 1-click purge for failed deployment logs.
+- **Hardened Installer & Environment:** Production installer writing environment variables to `/etc/liteploy/liteploy.env` (`chmod 600`), cryptographic 32-byte session secret generation, and strict health-check polling before confirming installation.
+- **Live System Metrics:** Real-time container CPU and RAM resource monitoring via Docker Stats API.
+- **Zero-Downtime Healthchecks & Rollbacks:** Configurable HTTP endpoint verification before traffic cutover and 1-click rollback to prior deployment states.
+- **Persistent Volume Mounts:** Host-to-container volume mapping for database and state persistence across deployments.
 
 ---
 

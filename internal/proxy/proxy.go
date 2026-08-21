@@ -33,10 +33,13 @@ type Route struct {
 
 // Manager manages Caddy configuration via the Admin API.
 type Manager struct {
-	adminAddr string
-	logger    *slog.Logger
-	httpClient *http.Client
-	routes    map[string]*Route // keyed by AppID
+	adminAddr       string
+	logger          *slog.Logger
+	httpClient      *http.Client
+	routes          map[string]*Route // keyed by AppID
+	dashboardDomain string
+	dashboardTarget string
+	lastKnownGood   map[string]any
 }
 
 // NewManager creates a proxy Manager.
@@ -54,6 +57,25 @@ func NewManager(adminAddr string, logger *slog.Logger) *Manager {
 		},
 		routes: make(map[string]*Route),
 	}
+}
+
+// SetDashboardRoute sets the dashboard domain (e.g. "liteploy.example.com") routing to target (e.g. "127.0.0.1:8080").
+func (m *Manager) SetDashboardRoute(ctx context.Context, domain, target string) error {
+	m.dashboardDomain = domain
+	m.dashboardTarget = target
+	return m.apply(ctx)
+}
+
+// RemoveDashboardRoute removes the dashboard reverse proxy route.
+func (m *Manager) RemoveDashboardRoute(ctx context.Context) error {
+	m.dashboardDomain = ""
+	m.dashboardTarget = ""
+	return m.apply(ctx)
+}
+
+// GetDashboardDomain returns the active dashboard domain configured in Caddy.
+func (m *Manager) GetDashboardDomain() string {
+	return m.dashboardDomain
 }
 
 // UpsertRoute adds or updates a route for an application, then applies to Caddy.
@@ -100,10 +122,25 @@ func (m *Manager) apply(ctx context.Context) error {
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		
+		// Attempt rollback to last known good config if available
+		if m.lastKnownGood != nil {
+			if rbData, rbErr := json.Marshal(m.lastKnownGood); rbErr == nil {
+				if rbReq, rbReqErr := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(rbData)); rbReqErr == nil {
+					rbReq.Header.Set("Content-Type", "application/json")
+					if rbResp, doErr := m.httpClient.Do(rbReq); doErr == nil {
+						rbResp.Body.Close()
+						m.logger.Warn("proxy: rolled back Caddy configuration after error")
+					}
+				}
+			}
+		}
+
 		return fmt.Errorf("proxy: caddy returned %d: %s", resp.StatusCode, string(body))
 	}
 
-	m.logger.Info("caddy routes updated", "route_count", len(m.routes))
+	m.lastKnownGood = cfg
+	m.logger.Info("caddy routes updated", "route_count", len(m.routes), "dashboard_domain", m.dashboardDomain)
 	return nil
 }
 
@@ -126,6 +163,7 @@ func (m *Manager) Ping(ctx context.Context) error {
 func (m *Manager) buildCaddyConfig() map[string]any {
 	var routes []map[string]any
 
+	// 1. Application routes
 	for _, route := range m.routes {
 		if len(route.Domains) == 0 || route.Upstream == "" {
 			continue
@@ -149,9 +187,24 @@ func (m *Manager) buildCaddyConfig() map[string]any {
 		routes = append(routes, r)
 	}
 
-	// LITEPLOY admin panel route — served internally.
-	// This is added last so application routes take precedence.
-	// In production, LITEPLOY itself is also behind Caddy.
+	// 2. LITEPLOY dashboard route (e.g. liteploy.example.com -> 127.0.0.1:8080)
+	if m.dashboardDomain != "" && m.dashboardTarget != "" {
+		dashRoute := map[string]any{
+			"match": []map[string]any{
+				{"host": []string{m.dashboardDomain}},
+			},
+			"handle": []map[string]any{
+				{
+					"handler": "reverse_proxy",
+					"upstreams": []map[string]any{
+						{"dial": m.dashboardTarget},
+					},
+				},
+			},
+			"terminal": true,
+		}
+		routes = append(routes, dashRoute)
+	}
 
 	return map[string]any{
 		"apps": map[string]any{

@@ -41,13 +41,58 @@
                 <h1>NETWORK TERMINALS</h1>
                 <p class="subtitle">Active domain mappings routed via Caddy Reverse Proxy</p>
             </div>
+            <div>
+                <a href="/settings" class="btn btn-primary">[ CONFIGURE PRIMARY DOMAIN ]</a>
+            </div>
+        </div>
+
+        <!-- Primary Domain Status Card -->
+        <div class="card mb-4" style="border: 2px solid var(--rp-surface2);">
+            <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                <h2><span class="card-icon">◉</span> PRIMARY DOMAIN &amp; WILDCARD HOSTING</h2>
+                <div>
+                    {{if .Settings.PrimaryDomain}}
+                        {{if .Settings.DNSVerified}}
+                            <span class="status-badge status-running">DNS VERIFIED</span>
+                        {{else}}
+                            <span class="status-badge status-failed">DNS UNVERIFIED</span>
+                        {{end}}
+                        {{if .Settings.HTTPSEnabled}}
+                            <span class="status-badge status-running" style="margin-left: 5px;">HTTPS ACTIVE</span>
+                        {{end}}
+                    {{else}}
+                        <span class="badge-neutral">NOT CONFIGURED</span>
+                    {{end}}
+                </div>
+            </div>
+            <div style="padding: 0.75rem 0;">
+                {{if .Settings.PrimaryDomain}}
+                <div class="app-info-row" style="margin-bottom: 0.5rem;">
+                    <span class="text-muted">PRIMARY DOMAIN:</span>
+                    <strong>{{.Settings.PrimaryDomain}}</strong>
+                </div>
+                <div class="app-info-row" style="margin-bottom: 0.5rem;">
+                    <span class="text-muted">DASHBOARD URL:</span>
+                    <a href="https://{{.Settings.DashboardDomain}}" target="_blank" rel="noopener noreferrer" class="domain-link">https://{{.Settings.DashboardDomain}}</a>
+                </div>
+                <div class="app-info-row">
+                    <span class="text-muted">WILDCARD ROUTING:</span>
+                    <code>*.{{.Settings.PrimaryDomain}} → {{.ServerIP}}</code>
+                </div>
+                {{else}}
+                <p class="text-muted" style="margin: 0;">
+                    No primary domain set. Configure a primary domain (e.g. <code>example.com</code>) to enable automatic wildcard subdomains (<code>app.example.com</code>, <code>api.example.com</code>) with instant SSL/TLS.
+                    <a href="/settings" style="color: var(--rp-primary); margin-left: 5px;">Setup Primary Domain →</a>
+                </p>
+                {{end}}
+            </div>
         </div>
 
         <div class="info-box">
             <div class="info-box-icon">◈</div>
             <div class="info-box-content">
                 <strong style="font-family:var(--font-pixel); font-size:0.42rem; color:var(--rp-primary)">ROUTING PROTOCOL</strong><br>
-                Point your domain <code>A</code> or <code>AAAA</code> record to your VPS IP. Caddy will automatically provision Let's Encrypt / ZeroSSL TLS certificates and proxy traffic to the designated application container port.
+                Point your domain <code>A</code> or <code>AAAA</code> record to your VPS IP (<code>{{.ServerIP}}</code>). Caddy will automatically provision Let's Encrypt / ZeroSSL TLS certificates and proxy traffic to the designated application container port.
             </div>
         </div>
 

@@ -11,6 +11,7 @@ import (
 
 	"github.com/liteploy/liteploy/internal/application"
 	"github.com/liteploy/liteploy/internal/proxy"
+	"github.com/liteploy/liteploy/internal/system"
 )
 
 // --- Deployments List (HTML) ---
@@ -57,9 +58,23 @@ func (s *Server) handleDomainsList(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	settings := s.settingsSvc.Get()
+	serverIP := settings.ServerIP
+	if serverIP == "" {
+		serverIP = system.GetServerPublicIP(r.Context())
+		if serverIP == "" {
+			serverIP = r.Host
+			if strings.Contains(serverIP, ":") {
+				serverIP = strings.Split(serverIP, ":")[0]
+			}
+		}
+	}
+
 	s.renderPage(w, r, "domains.html", map[string]any{
-		"Domains": domainItems,
-		"Session": sessionFromContext(r.Context()),
+		"Domains":  domainItems,
+		"Settings": settings,
+		"ServerIP": serverIP,
+		"Session":  sessionFromContext(r.Context()),
 	})
 }
 

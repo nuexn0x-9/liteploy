@@ -12,6 +12,7 @@ LITEPLOY
 ├── Deployment Engine (State machine + bounded worker queue)
 ├── Docker Integration (Moby Engine SDK via UNIX socket)
 ├── Proxy Integration (Caddy Admin API via http://localhost:2019)
+├── Settings & Domain Service (Primary domain, wildcard routing, DNS lookup)
 ├── Storage Layer (Atomic JSON filesystem state)
 ├── Auth & Security (HMAC session cookies + CSRF + Bcrypt)
 └── Log Engine (SSE streaming + disk tailing)
@@ -30,9 +31,31 @@ To maintain an idle memory footprint of **~18.5 MB RAM**:
 
 ---
 
-## ?? Internal Docker Networking
+## 🌐 Reverse Proxy & Domain Routing Flow
 
-LITEPLOY abstracts Docker networking by placing all managed containers inside a single, isolated Docker bridge network named liteploy-net.
-Containers are automatically named based on their Application ID (e.g., liteploy-xyz123).
+```
+Incoming Request (e.g. https://liteploy.example.com or https://app.example.com)
+                            │
+                            ▼
+           Caddy Reverse Proxy (:80, :443)
+           (Automatic TLS via Let's Encrypt)
+                            │
+            ┌───────────────┴───────────────┐
+            ▼                               ▼
+    Dashboard Route                  Application Route
+  (127.0.0.1:8080)             (liteploy-app-xxx:PORT)
+            │                               │
+            ▼                               ▼
+     LITEPLOY Binary               Docker Application Container
+```
 
-This architecture seamlessly enables **Multi-Tier Application Communication** without exposing internal ports to the public internet. For example, your backend container can communicate directly with your database container simply by using the database's internal DNS hostname (e.g., postgres://user:pass@liteploy-database-app:5432).
+---
+
+## 🐳 Internal Docker Networking
+
+LITEPLOY places all managed containers inside a dedicated, isolated Docker bridge network (`liteploy-net`).
+Containers are named based on their Application ID (e.g. `liteploy-app-001-0001`).
+
+This architecture enables **Multi-Tier Application Communication** without exposing internal ports to the public internet:
+- Backend connects to Database using `postgres://user:pass@liteploy-db-app:5432`
+- Frontend connects to Backend internally using `http://liteploy-backend-app:8000`

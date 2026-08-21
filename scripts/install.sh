@@ -47,6 +47,12 @@ log_ok "linux-${BINARY_ARCH} detected"
 # 4. Dependency Checks
 command -v curl >/dev/null 2>&1 || log_error "curl is required but not installed."
 
+# Ensure openssl is installed for secure token generation
+if ! command -v openssl >/dev/null 2>&1; then
+    log_info "Installing openssl..."
+    apt-get update -yqq && apt-get install -y openssl >/dev/null 2>&1 || true
+fi
+
 log_info "Detecting Docker..."
 if ! command -v docker >/dev/null 2>&1; then
     log_warn "Docker Engine is not installed."
@@ -67,16 +73,15 @@ else
     log_ok "Git detected"
 fi
 
-# 5. Download Binary
+# 5. Download or Build Binary
 REPO="nuexn0x-9/liteploy"
 DOWNLOAD_URL="https://github.com/${REPO}/releases/latest/download/liteploy-linux-${BINARY_ARCH}"
 
 TARGET_BIN="/usr/local/bin/liteploy"
 TMP_BIN="/tmp/liteploy_download_${BINARY_ARCH}"
 
-log_info "Installing Liteploy..."
+log_info "Installing Liteploy binary..."
 
-# Try downloading from GitHub Releases
 DOWNLOAD_SUCCESS=false
 if curl -sL -w "%{http_code}" "${DOWNLOAD_URL}" -o "${TMP_BIN}" | grep -q '200'; then
     # Check if file size is > 5MB to ensure it's not a tiny XML error page
@@ -87,30 +92,27 @@ if curl -sL -w "%{http_code}" "${DOWNLOAD_URL}" -o "${TMP_BIN}" | grep -q '200';
 fi
 
 if [ "$DOWNLOAD_SUCCESS" = false ]; then
-    log_warn "GitHub Release not found or download failed."
-    log_info "Falling back to source build..."
+    log_warn "GitHub Release binary not found or download failed."
+    log_info "Falling back to building from source..."
     
-    # Check if git is installed
     if ! command -v git >/dev/null 2>&1; then
-        apt-get update -yqq && apt-get install -y git >/dev/null 2>&1 || log_error "Git is required for fallback build. Please install git."
+        apt-get update -yqq && apt-get install -y git >/dev/null 2>&1 || log_error "Git is required for fallback build."
     fi
     
-    # Check if Go is installed
     if ! command -v go >/dev/null 2>&1; then
-        log_info "Installing Go compiler temporarily..."
+        log_info "Installing Go compiler..."
         GO_VERSION="1.22.1"
         curl -sL "https://go.dev/dl/go${GO_VERSION}.linux-${BINARY_ARCH}.tar.gz" -o /tmp/go.tar.gz
         rm -rf /usr/local/go && tar -C /usr/local -xzf /tmp/go.tar.gz
         export PATH=$PATH:/usr/local/go/bin
     fi
     
-    # Clone and build
     rm -rf /tmp/liteploy-source
     git clone --depth 1 "https://github.com/${REPO}.git" /tmp/liteploy-source >/dev/null 2>&1 || log_error "Failed to clone repository."
     cd /tmp/liteploy-source
     
-    VERSION=$(git rev-parse --short HEAD)
-    LDFLAGS="-s -w -X github.com/liteploy/liteploy/internal/system.Version=source-fallback -X github.com/liteploy/liteploy/internal/system.CommitSHA=${VERSION}"
+    VERSION=$(git rev-parse --short HEAD 2>/dev/null || echo "latest")
+    LDFLAGS="-s -w -X github.com/liteploy/liteploy/internal/system.Version=v1.0.0 -X github.com/liteploy/liteploy/internal/system.CommitSHA=${VERSION}"
     
     log_info "Compiling binary from source..."
     GOOS=linux GOARCH=${BINARY_ARCH} go build -ldflags "${LDFLAGS}" -o "${TMP_BIN}" ./cmd/liteploy || log_error "Source compilation failed."
@@ -120,26 +122,65 @@ fi
 
 chmod +x "${TMP_BIN}"
 mv -f "${TMP_BIN}" "${TARGET_BIN}"
-log_ok "Binary installed"
+log_ok "Binary installed to ${TARGET_BIN}"
 
-# 6. Create Data Directory
+# 6. Create Directories
 DATA_DIR="/var/lib/liteploy/data"
 mkdir -p "${DATA_DIR}"
+mkdir -p /var/lib/liteploy
 chmod 755 /var/lib/liteploy
 
-# 7. Systemd Service Setup
+CONF_DIR="/etc/liteploy"
+mkdir -p "${CONF_DIR}"
+chmod 700 "${CONF_DIR}"
+
+ENV_FILE="${CONF_DIR}/liteploy.env"
+
+# 7. Environment File Setup & Secure Session Secret Generation
+log_info "Configuring environment..."
+
+EXISTING_SECRET=""
+if [ -f "${ENV_FILE}" ]; then
+    EXISTING_SECRET=$(grep -E '^LITEPLOY_SESSION_SECRET=' "${ENV_FILE}" 2>/dev/null | cut -d'=' -f2- | tr -d '"'\'' ')
+fi
+
+# If existing secret is missing, too short, or is a literal placeholder, generate a new secure one
+if [ -z "${EXISTING_SECRET}" ] || [ "${#EXISTING_SECRET}" -lt 32 ] || [ "${EXISTING_SECRET}" = "LITEPLOY_SESSION_SECRET" ] || [ "${EXISTING_SECRET}" = "default-liteploy-session-secret-change-me" ]; then
+    log_info "Generating cryptographic session secret..."
+    SESSION_SECRET=""
+    if command -v openssl >/dev/null 2>&1; then
+        SESSION_SECRET=$(openssl rand -hex 32)
+    fi
+    if [ -z "${SESSION_SECRET}" ] || [ "${#SESSION_SECRET}" -lt 32 ]; then
+        SESSION_SECRET=$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')
+    fi
+    
+    if [ "${#SESSION_SECRET}" -lt 32 ]; then
+        log_error "Failed to generate secure session secret (less than 32 bytes)."
+    fi
+else
+    log_info "Preserving existing session secret from ${ENV_FILE}"
+    SESSION_SECRET="${EXISTING_SECRET}"
+fi
+
+# Write environment file with strict 600 permissions
+cat <<EOF > "${ENV_FILE}"
+LITEPLOY_ADDR=:8080
+LITEPLOY_DATA_DIR=${DATA_DIR}
+LITEPLOY_CADDY_ADMIN=http://localhost:2019
+LITEPLOY_SESSION_SECRET=${SESSION_SECRET}
+LITEPLOY_LOG_LEVEL=info
+LITEPLOY_LOG_JSON=true
+EOF
+
+chmod 600 "${ENV_FILE}"
+log_ok "Environment configured in ${ENV_FILE} (chmod 600)"
+
+# 8. Systemd Service Setup
 SERVICE_FILE="/etc/systemd/system/liteploy.service"
 
 if command -v systemctl >/dev/null 2>&1; then
-    log_info "Starting service..."
-    # Generate or retain existing session secret
-    SESSION_SECRET=""
-    if [ -f "${SERVICE_FILE}" ] && grep -q "LITEPLOY_SESSION_SECRET=" "${SERVICE_FILE}"; then
-        SESSION_SECRET=$(grep "LITEPLOY_SESSION_SECRET=" "${SERVICE_FILE}" | head -n 1 | cut -d'=' -f2)
-    fi
-    if [ -z "${SESSION_SECRET}" ]; then
-        SESSION_SECRET=$(openssl rand -hex 32 2>/dev/null || tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 64 2>/dev/null || echo "default-liteploy-session-secret-change-me")
-    fi
+    log_info "Installing systemd service..."
 
     cat <<EOF > "${SERVICE_FILE}"
 [Unit]
@@ -156,15 +197,7 @@ WorkingDirectory=/var/lib/liteploy
 ExecStart=${TARGET_BIN}
 Restart=always
 RestartSec=5s
-
-# Security & Environment
-Environment=LITEPLOY_ADDR=:8080
-Environment=LITEPLOY_DATA_DIR=${DATA_DIR}
-Environment=LITEPLOY_CADDY_ADMIN=http://localhost:2019
-Environment=LITEPLOY_SESSION_SECRET=${SESSION_SECRET}
-Environment=LITEPLOY_LOG_LEVEL=info
-Environment=LITEPLOY_LOG_JSON=true
-
+EnvironmentFile=${ENV_FILE}
 LimitNOFILE=65536
 
 [Install]
@@ -173,19 +206,56 @@ EOF
 
     systemctl daemon-reload
     systemctl enable liteploy.service >/dev/null 2>&1
+    log_info "Starting Liteploy service..."
     systemctl restart liteploy.service
-    log_ok "Liteploy running"
+
+    # 9. Strict Service Health Check
+    log_info "Verifying service health..."
+    HEALTHY=false
+    for i in $(seq 1 15); do
+        sleep 1
+        
+        # Check systemd active status
+        if ! systemctl is-active --quiet liteploy; then
+            continue
+        fi
+
+        # Check HTTP response code (accept 200, 302, etc.)
+        HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8080/ 2>/dev/null || echo "000")
+        if [ "$HTTP_CODE" != "000" ] && [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 500 ]; then
+            HEALTHY=true
+            break
+        fi
+    done
+
+    if [ "$HEALTHY" = false ]; then
+        echo ""
+        echo -e "${RED}[ERROR] Liteploy failed to start or did not respond on http://127.0.0.1:8080/${NC}"
+        echo ""
+        echo -e "${YELLOW}--- systemctl status liteploy ---${NC}"
+        systemctl status liteploy --no-pager || true
+        echo ""
+        echo -e "${YELLOW}--- journalctl -u liteploy -n 50 ---${NC}"
+        journalctl -u liteploy -n 50 --no-pager || true
+        echo ""
+        exit 1
+    fi
+
+    log_ok "Liteploy service is healthy and responding"
 else
     log_warn "systemd not detected. Please run LITEPLOY manually using: ${TARGET_BIN}"
 fi
 
-# 8. Print Success Information
-IP_ADDR="$(curl -s https://api.ipify.org 2>/dev/null || hostname -I | awk '{print $1}')"
+# 10. Print Installation Summary
+IP_ADDR="$(curl -s --max-time 3 https://api.ipify.org 2>/dev/null || curl -s --max-time 3 https://icanhazip.com 2>/dev/null || hostname -I | awk '{print $1}')"
 
-echo -e "\n=================================================="
+echo ""
+echo -e "=================================================="
 echo -e "${GREEN}🚀 LITEPLOY Installation Complete!${NC}"
 echo -e "=================================================="
 echo -e "Dashboard URL: ${BLUE}http://${IP_ADDR}:8080${NC}"
+echo -e "Environment:   ${ENV_FILE} (chmod 600)"
 echo -e "Data Storage:  ${DATA_DIR}"
 echo -e "Service Logs:  sudo journalctl -u liteploy -f"
-echo -e "==================================================\n"
+echo -e "=================================================="
+echo ""
