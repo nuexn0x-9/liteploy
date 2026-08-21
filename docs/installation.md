@@ -27,11 +27,12 @@ curl -fsSL https://raw.githubusercontent.com/nuexn0x-9/liteploy/main/scripts/ins
 ### What the installer does:
 1. Detects CPU architecture (`amd64` or `arm64`).
 2. Validates Docker and Git dependencies.
-3. Downloads the official LITEPLOY binary to `/usr/local/bin/liteploy` (with automatic source build fallback).
-4. Creates storage directory `/var/lib/liteploy/data` and configuration directory `/etc/liteploy` (`chmod 700`).
-5. Generates a 32-byte cryptographic session secret and writes `/etc/liteploy/liteploy.env` (`chmod 600`) idempotently without overwriting existing secrets.
-6. Installs `/etc/systemd/system/liteploy.service` configured with `EnvironmentFile=/etc/liteploy/liteploy.env`.
-7. Starts the service and executes strict health-check polling before confirming installation.
+3. Automatically provisions `liteploy-network` and launches the `liteploy-caddy` Docker container.
+4. Downloads the official LITEPLOY binary to `/usr/local/bin/liteploy` (with automatic source build fallback).
+5. Creates storage directory `/var/lib/liteploy/data` and configuration directory `/etc/liteploy` (`chmod 700`).
+6. Generates a 32-byte cryptographic session secret and writes `/etc/liteploy/liteploy.env` (`chmod 600`) idempotently without overwriting existing secrets.
+7. Installs `/etc/systemd/system/liteploy.service` configured with `EnvironmentFile=/etc/liteploy/liteploy.env`.
+8. Starts the service and executes strict health-check polling before confirming installation.
 
 ---
 
@@ -58,7 +59,7 @@ If you prefer installing manually without the installer script:
    cat <<EOF | sudo tee /etc/liteploy/liteploy.env > /dev/null
    LITEPLOY_ADDR=:8080
    LITEPLOY_DATA_DIR=/var/lib/liteploy/data
-   LITEPLOY_CADDY_ADMIN=http://localhost:2019
+   LITEPLOY_CADDY_ADMIN=http://127.0.0.1:2019
    LITEPLOY_SESSION_SECRET=${SESSION_SECRET}
    LITEPLOY_LOG_LEVEL=info
    LITEPLOY_LOG_JSON=true
@@ -74,7 +75,6 @@ If you prefer installing manually without the installer script:
    Description=LITEPLOY - Lightweight Docker Deployment Platform
    After=network.target docker.service
    Requires=docker.service
-   Wants=caddy.service
 
    [Service]
    Type=simple

@@ -27,7 +27,7 @@ Traditional self-hosted deployment panels often ship with PostgreSQL, Redis, bac
 - **Zero Database:** Application state and deployment history are persisted atomically directly on the filesystem as structured JSON.
 - **Zero Redis / Queue Infrastructure:** Bounded in-process worker pool and job queues guard against memory spikes.
 - **Embedded Frontend:** Server-rendered HTML templates + HTMX compiled directly into a single ~17 MB binary.
-- **Docker & Caddy Integration:** Direct communication with the local Docker Engine API and Caddy Reverse Proxy Admin API for automatic HTTPS.
+- **Containerized Caddy Reverse Proxy:** Managed `liteploy-caddy` container in a shared `liteploy-network` for direct Docker DNS routing (`liteploy-app-xxx:PORT`) and automated Let's Encrypt HTTPS.
 
 ---
 
@@ -37,24 +37,27 @@ Traditional self-hosted deployment panels often ship with PostgreSQL, Redis, bac
                         +----------------------------+
                         |   Browser / Git Webhooks   |
                         +----------------------------+
-                                      |
-                                      v
+                                      │
+                                      ▼
                         +----------------------------+
                         |     LITEPLOY Binary        |
                         | (net/http + HTMX + Slog)   |
                         +----------------------------+
-                          /           |            \
-                         /            |             \
-                        v             v              v
-            +---------------+  +------------+  +------------------+
-            | Filesystem    |  | Docker     |  | Caddy Proxy      |
-            | Atomic State  |  | Engine API |  | Admin API (:2019)|
-            +---------------+  +------------+  +------------------+
-                                      |                 |
-                                      v                 v
-                               +----------------------------------+
-                               | Isolated Application Containers  |
-                               +----------------------------------+
+                          /           │            \
+                         /            │             \
+                        ▼             ▼              ▼
+            +---------------+  +------------+  +--------------------------+
+            | Filesystem    |  | Docker     |  | Caddy Container (Docker) |
+            | Atomic State  |  | Engine API |  | Admin API (127.0.0.1:2019)|
+            +---------------+  +------------+  +--------------------------+
+                                      │                      │
+                                      ▼                      ▼
+                          +──────────────────────────────────────────────+
+                          │      Docker Network (liteploy-network)       │
+                          │   ├── liteploy-caddy (:80, :443)             │
+                          │   ├── liteploy-app-001 (alias)               │
+                          │   └── liteploy-app-002 (alias)               │
+                          +──────────────────────────────────────────────+
 ```
 
 ## 🚀 Key Features
@@ -95,7 +98,7 @@ LITEPLOY is designed with strict resource constraints:
 
 - **Operating Systems:** Linux (Ubuntu 20.04/22.04/24.04, Debian 11/12, CentOS/Rocky Linux 9, Alpine Linux 3.18+)
 - **Architectures:** `amd64` (x86_64), `arm64` (aarch64)
-- **Prerequisites:** Docker Engine 20.10+, Caddy 2.7+ (optional but recommended for automatic HTTPS)
+- **Prerequisites:** Docker Engine 20.10+ and Git (Caddy reverse proxy is provisioned automatically in Docker)
 
 ---
 
@@ -110,10 +113,11 @@ curl -fsSL https://raw.githubusercontent.com/nuexn0x-9/liteploy/main/scripts/ins
 The installer automatically:
 1. Detects your CPU architecture (`amd64` or `arm64`).
 2. Verifies Docker and Git availability.
-3. Generates a secure cryptographic session secret in `/etc/liteploy/liteploy.env` (`chmod 600`).
-4. Installs the compiled binary to `/usr/local/bin/liteploy`.
-5. Configures and starts the Systemd service (`liteploy.service`).
-6. Executes strict health-check polling before confirming installation success.
+3. Provisions `liteploy-network` and initializes the `liteploy-caddy` container.
+4. Generates a secure cryptographic session secret in `/etc/liteploy/liteploy.env` (`chmod 600`).
+5. Installs the compiled binary to `/usr/local/bin/liteploy`.
+6. Configures and starts the Systemd service (`liteploy.service`).
+7. Executes strict health-check polling before confirming installation success.
 
 ---
 

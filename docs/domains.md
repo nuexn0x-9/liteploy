@@ -1,6 +1,6 @@
 # Custom Domains, Wildcards & Reverse Proxy Routing
 
-LITEPLOY integrates natively with the **Caddy Reverse Proxy Admin API** (`http://localhost:2019`) to deliver automated domain routing, wildcard subdomains, and zero-configuration TLS/HTTPS certificates.
+LITEPLOY integrates natively with the containerized **Caddy Reverse Proxy Admin API** (`http://127.0.0.1:2019`) to deliver automated domain routing, wildcard subdomains, and zero-configuration TLS/HTTPS certificates.
 
 ---
 
@@ -52,7 +52,8 @@ To route incoming traffic to a specific containerized app:
    - If using wildcard DNS: enter `api.example.com` (ready instantly).
    - If using a separate custom domain: enter `custom-client.org` (ensure `A` record points to your VPS IP).
 3. Click **+ Add Domain**.
-4. LITEPLOY immediately syncs routing tables to Caddy via `POST http://localhost:2019/load`.
+4. LITEPLOY immediately syncs routing tables to Caddy via `POST http://127.0.0.1:2019/load`.
+5. Caddy routes traffic directly to the container alias inside `liteploy-network` (e.g. `liteploy-app-001:8000`).
 
 ---
 

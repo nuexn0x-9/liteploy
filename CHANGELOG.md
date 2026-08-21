@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [v1.0.0] - 2026-08-21
 
 ### Added
+- **Containerized Caddy Reverse Proxy:** Fully migrated Caddy from host systemd service to an isolated Docker container (`liteploy-caddy` on `liteploy-network`), completely eliminating 502 DNS resolution errors between host and internal container hostnames.
+- **Direct Docker DNS Reverse Proxy Routing:** Caddy dials application backends directly via internal Docker DNS (`liteploy-app-xxx:PORT`), eliminating the need to expose dynamic host ports.
 - **Primary Domain & Wildcard Subdomains:** Global primary domain configuration (`example.com`) with automatic dashboard routing (`liteploy.example.com`) and wildcard subdomain hosting (`app.example.com`, `api.example.com`).
 - **Initial Setup Wizard:** Two-step guided setup for admin account creation and primary domain / wildcard DNS configuration with live DNS verification.
 - **Automated Caddy TLS & Rollback:** Automated Caddy route generation for dashboard and subdomains with automatic HTTPS certificate provisioning and instant rollback on failure.

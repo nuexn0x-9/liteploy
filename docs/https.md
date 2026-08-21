@@ -1,6 +1,6 @@
 # Automatic HTTPS & SSL Certificates
 
-LITEPLOY utilizes **Caddy Reverse Proxy** to provision and renew TLS/SSL certificates automatically via Let's Encrypt and ZeroSSL.
+LITEPLOY utilizes a containerized **Caddy Reverse Proxy (`liteploy-caddy`)** to provision and renew TLS/SSL certificates automatically via Let's Encrypt and ZeroSSL.
 
 ---
 
@@ -14,6 +14,21 @@ LITEPLOY utilizes **Caddy Reverse Proxy** to provision and renew TLS/SSL certifi
 2. **Application Subdomains & Custom Domains:**
    - Every domain mapped to an application (e.g. `app.example.com` or `custom-domain.com`) is dynamically registered in Caddy.
    - Caddy requests certificates on-demand or upon first request, ensuring zero maintenance and automatic 90-day renewals.
+   - Certificate data is stored persistently on the host at `/var/lib/liteploy/data/caddy`, surviving container restarts.
+
+---
+
+## ☁️ Cloudflare Integration & SSL/TLS Configuration
+
+If your domain is managed through **Cloudflare**:
+
+| Cloudflare SSL/TLS Mode | Status | Notes |
+|---|---|---|
+| **Full (Recommended)** | ✅ Working | Encrypts end-to-end between visitor, Cloudflare, and Caddy. |
+| **Full (Strict)** | ✅ Working | Requires active certificate on VPS (Caddy). |
+| **Flexible** | ⚠️ Not Recommended | May cause 502 or redirect loops because Cloudflare calls port 80 while Caddy enforces HTTPS redirect. |
+
+> **Pro Tip for Let's Encrypt Direct Issue:** If you want Let's Encrypt certificates directly issued to Caddy without Cloudflare proxy interference, set your DNS record to **DNS Only (Grey Cloud)**.
 
 ---
 
@@ -38,6 +53,6 @@ sudo firewall-cmd --reload
 ## 🔄 Automatic Rollback Protection
 
 If a bad route or domain configuration causes Caddy to reject a configuration update:
-1. LITEPLOY intercepts the non-200 HTTP response from `http://localhost:2019/load`.
+1. LITEPLOY intercepts the non-200 HTTP response from `http://127.0.0.1:2019/load`.
 2. The proxy manager automatically rolls back to the `lastKnownGood` configuration.
 3. Active TLS connections and valid application routes remain uninterrupted.

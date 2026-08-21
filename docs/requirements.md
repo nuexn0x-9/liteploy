@@ -24,7 +24,7 @@ LITEPLOY is engineered specifically for low-resource Linux Virtual Private Serve
   - CentOS Stream 9 / Rocky Linux 9 / AlmaLinux 9
   - Alpine Linux 3.18+
 - **Container Engine:** Docker Engine 20.10+ (or Docker CE)
-- **Reverse Proxy:** Caddy 2.7+ (optional; required if using automatic domain routing)
+- **Reverse Proxy:** Containerized Caddy (`liteploy-caddy` — automatically managed via Docker)
 
 ---
 

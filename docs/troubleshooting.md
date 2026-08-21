@@ -41,3 +41,27 @@ This manual covers diagnostic steps for common operational issues.
 - **Cause:** Container exceeded configured RAM limit or host VPS ran out of memory.
 - **Diagnosis:** Run `dmesg -T | grep -i oom` or inspect container stats.
 - **Solution:** Increase the RAM limit in Application Configuration or add Swap memory to your VPS.
+
+---
+
+## 5. Domain Returns 502 Bad Gateway
+
+- **Symptom:** Visiting `https://yourdomain.com` results in `502 Bad Gateway` or Cloudflare error.
+- **Possible Causes & Solutions:**
+  1. **Old Host Caddy Service Running:**
+     - If `caddy.service` was previously installed on the host systemd, it may still be binding ports 80/443.
+     - **Fix:** Stop and disable host Caddy:
+       ```bash
+       sudo systemctl stop caddy
+       sudo systemctl disable caddy
+       sudo systemctl restart liteploy
+       ```
+  2. **`liteploy-caddy` Container Not Running:**
+     - Verify with `sudo docker ps`. If `liteploy-caddy` is missing:
+       ```bash
+       sudo systemctl restart liteploy
+       ```
+  3. **Cloudflare SSL/TLS Encryption Mode:**
+     - If using Cloudflare proxy, go to **Cloudflare Dashboard** -> **SSL/TLS** -> set mode to **Full** (or **Full Strict**). Avoid *Flexible* as it can create protocol mismatches on port 80.
+  4. **Application Container Starting / Unhealthy:**
+     - Check if your backend/frontend container is running (`docker ps`) and inspect its logs on the dashboard.

@@ -4,7 +4,7 @@ LITEPLOY is designed to be simple, but it is fully capable of running complex, m
 
 In this tutorial, we will deploy a **PostgreSQL Database** and a **Node.js API Backend** that connects to it. 
 
-Because LITEPLOY places all containers inside an isolated internal Docker network (`liteploy-net`), containers can communicate with each other securely using their **internal DNS names** without exposing database ports to the public internet.
+Because LITEPLOY places all containers inside an isolated internal Docker network (`liteploy-network`), containers can communicate with each other securely using their **internal DNS names** without exposing database ports to the public internet.
 
 ---
 
