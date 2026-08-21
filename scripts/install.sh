@@ -207,10 +207,32 @@ if command -v systemctl > /dev/null 2>&1 && systemctl list-units --full --all 2>
     log_info "Liteploy will start liteploy-caddy Docker container automatically on boot."
 fi
 
-# Pull Caddy image proactively so the first Liteploy start is fast.
+# Pre-pull Caddy image and launch liteploy-caddy container
 if command -v docker > /dev/null 2>&1; then
-    log_info "Pre-pulling Caddy Docker image (caddy:2-alpine)..."
-    docker pull caddy:2-alpine --quiet 2>/dev/null && log_ok "Caddy image ready" || log_warn "Could not pre-pull Caddy image — will pull on first start"
+    log_info "Ensuring liteploy-network and liteploy-caddy container..."
+    docker pull caddy:2-alpine --quiet 2>/dev/null || true
+    docker network create liteploy-network 2>/dev/null || true
+    mkdir -p "${DATA_DIR}/caddy"
+
+    if [ ! -f "${DATA_DIR}/caddy/config.json" ]; then
+        echo '{"admin":{"listen":"0.0.0.0:2019"}}' > "${DATA_DIR}/caddy/config.json"
+    fi
+
+    if ! docker ps --format '{{.Names}}' | grep -q '^liteploy-caddy$'; then
+        docker rm -f liteploy-caddy 2>/dev/null || true
+        docker run -d \
+          --name liteploy-caddy \
+          --network liteploy-network \
+          --restart unless-stopped \
+          -v "${DATA_DIR}/caddy:/data" \
+          -p 80:80 \
+          -p 443:443 \
+          -p 127.0.0.1:2019:2019 \
+          caddy:2-alpine caddy run --config /data/config.json --adapter json >/dev/null 2>&1 || true
+        log_ok "liteploy-caddy container initialized"
+    else
+        log_ok "liteploy-caddy container running"
+    fi
 fi
 
 # 8. Systemd Service Setup
