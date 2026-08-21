@@ -214,9 +214,14 @@ if command -v docker > /dev/null 2>&1; then
     docker network create liteploy-network 2>/dev/null || true
     mkdir -p "${DATA_DIR}/caddy"
 
-    if [ ! -f "${DATA_DIR}/caddy/config.json" ]; then
-        echo '{"admin":{"listen":"0.0.0.0:2019"}}' > "${DATA_DIR}/caddy/config.json"
-    fi
+    cat <<'CADDY_EOF' > "${DATA_DIR}/caddy/Caddyfile"
+{
+    admin 0.0.0.0:2019
+}
+:80 {
+    respond "OK" 200
+}
+CADDY_EOF
 
     if ! docker ps --format '{{.Names}}' | grep -q '^liteploy-caddy$'; then
         docker rm -f liteploy-caddy 2>/dev/null || true
@@ -225,10 +230,11 @@ if command -v docker > /dev/null 2>&1; then
           --network liteploy-network \
           --restart unless-stopped \
           -v "${DATA_DIR}/caddy:/data" \
+          -v "${DATA_DIR}/caddy/Caddyfile:/etc/caddy/Caddyfile" \
           -p 80:80 \
           -p 443:443 \
           -p 127.0.0.1:2019:2019 \
-          caddy:2-alpine caddy run --config /data/config.json --adapter json >/dev/null 2>&1 || true
+          caddy:2-alpine || log_warn "Caddy container launch had warnings"
         log_ok "liteploy-caddy container initialized"
     else
         log_ok "liteploy-caddy container running"

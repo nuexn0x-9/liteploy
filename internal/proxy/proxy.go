@@ -93,27 +93,25 @@ func EnsureCaddyContainer(ctx context.Context, dockerCli docker.Engine, dataDir 
 		slog.Default().Warn("proxy: caddy image pull warning", "error", err)
 	}
 
-	// 4. Persistent data directory for TLS certificates and initial config.
+	// 4. Persistent data directory for TLS certificates and Caddyfile.
 	caddyDataDir := filepath.Join(dataDir, "caddy")
 	_ = os.MkdirAll(caddyDataDir, 0755)
 
-	initCfgFile := filepath.Join(caddyDataDir, "config.json")
-	if _, err := os.Stat(initCfgFile); os.IsNotExist(err) {
-		initJSON := `{"admin":{"listen":"0.0.0.0:2019"}}`
-		_ = os.WriteFile(initCfgFile, []byte(initJSON), 0644)
-	}
+	caddyfilePath := filepath.Join(caddyDataDir, "Caddyfile")
+	caddyfileContent := "{\n    admin 0.0.0.0:2019\n}\n:80 {\n    respond \"OK\" 200\n}\n"
+	_ = os.WriteFile(caddyfilePath, []byte(caddyfileContent), 0644)
 
 	// 5. Create the liteploy-caddy container.
 	caddyID, err := dockerCli.CreateContainer(ctx, docker.ContainerSpec{
 		Name:  CaddyContainerName,
 		Image: CaddyImage,
-		Cmd:   []string{"caddy", "run", "--config", "/data/config.json", "--adapter", "json"},
 		Labels: map[string]string{
 			"managed-by":    "liteploy",
 			"liteploy.role": "caddy",
 		},
 		Binds: []string{
 			caddyDataDir + ":/data",
+			caddyfilePath + ":/etc/caddy/Caddyfile",
 		},
 		// Publish HTTP/HTTPS to all host interfaces, and Admin API strictly to 127.0.0.1
 		ExtraPorts: []docker.ExtraPortBinding{
