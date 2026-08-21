@@ -122,6 +122,15 @@ SERVICE_FILE="/etc/systemd/system/liteploy.service"
 
 if command -v systemctl >/dev/null 2>&1; then
     log_info "Starting service..."
+    # Generate or retain existing session secret
+    SESSION_SECRET=""
+    if [ -f "${SERVICE_FILE}" ] && grep -q "LITEPLOY_SESSION_SECRET" "${SERVICE_FILE}"; then
+        SESSION_SECRET=$(grep "LITEPLOY_SESSION_SECRET=" "${SERVICE_FILE}" | cut -d'=' -f2)
+    fi
+    if [ -z "${SESSION_SECRET}" ]; then
+        SESSION_SECRET=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 64 | head -n 1)
+    fi
+
     cat <<EOF > "${SERVICE_FILE}"
 [Unit]
 Description=LITEPLOY - Lightweight Docker Deployment Platform
@@ -142,6 +151,7 @@ RestartSec=5s
 Environment=LITEPLOY_ADDR=:8080
 Environment=LITEPLOY_DATA_DIR=${DATA_DIR}
 Environment=LITEPLOY_CADDY_ADMIN=http://localhost:2019
+Environment=LITEPLOY_SESSION_SECRET=${SESSION_SECRET}
 Environment=LITEPLOY_LOG_LEVEL=info
 Environment=LITEPLOY_LOG_JSON=true
 
