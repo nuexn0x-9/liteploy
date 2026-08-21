@@ -178,9 +178,21 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Synchronize routing state to proxy on boot.
+	// Ensure liteploy-caddy Docker container is running.
+	// This replaces the host-level caddy.service entirely.
+	if dockerClient != nil {
+		logger.Info("ensuring caddy container is running")
+		if err := proxy.EnsureCaddyContainer(context.Background(), dockerClient, cfg.DataDir); err != nil {
+			logger.Warn("caddy container setup warning — proxy may not be available", "error", err)
+		} else {
+			logger.Info("caddy container ready", "network", proxy.LiteployNetwork)
+		}
+	}
+
+	// Synchronize routing state to proxy on boot using stable Docker DNS aliases.
 	for _, app := range appSvc.List() {
-		if app.Status == application.StatusRunning && len(app.Domains) > 0 {
+		if app.Status == application.StatusRunning && len(app.Domains) > 0 && app.Port > 0 {
+			// liteploy-{appID} is the stable Docker DNS alias set on each container.
 			upstream := fmt.Sprintf("liteploy-%s:%d", app.ID, app.Port)
 			_ = proxyMgr.UpsertRoute(context.Background(), &proxy.Route{
 				AppID:    app.ID,

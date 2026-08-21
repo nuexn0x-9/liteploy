@@ -210,7 +210,7 @@ func (p *Pipeline) Execute(ctx context.Context, dep *Deployment, progress io.Wri
 	fmt.Fprintf(progress, "[liteploy] Step 3/5: Creating and starting container...\n")
 
 	// Ensure common internal network exists
-	networkName := "liteploy-net"
+	networkName := proxy.LiteployNetwork
 	if p.dockerCli != nil {
 		if _, err := p.dockerCli.EnsureNetwork(ctx, networkName); err != nil {
 			p.logger.Warn("pipeline: ensure network warning", "network", networkName, "error", err)
@@ -218,6 +218,9 @@ func (p *Pipeline) Execute(ctx context.Context, dep *Deployment, progress io.Wri
 	}
 
 	containerName := fmt.Sprintf("liteploy-%s-%s", app.ID, dep.ID)
+	// stableAlias lets Caddy (inside liteploy-network) resolve this container
+	// via Docker DNS as "liteploy-{appID}" — stable across redeployments.
+	stableAlias := fmt.Sprintf("liteploy-%s", app.ID)
 	labels := app.ManagedLabels()
 	labels["liteploy.deployment_id"] = dep.ID
 
@@ -244,17 +247,18 @@ func (p *Pipeline) Execute(ctx context.Context, dep *Deployment, progress io.Wri
 	}
 
 	containerID, err := p.dockerCli.CreateContainer(ctx, docker.ContainerSpec{
-		Name:          containerName,
-		Image:         imageName,
-		Env:           envList,
-		Labels:        labels,
-		Binds:         binds,
-		ContainerPort: app.Port,
-		HostPort:      0, // internal bridge network
-		NetworkName:   networkName,
-		MemoryMB:      memMB,
-		CPUs:          cpus,
-		RestartPolicy: "unless-stopped",
+		Name:           containerName,
+		Image:          imageName,
+		Env:            envList,
+		Labels:         labels,
+		Binds:          binds,
+		ContainerPort:  app.Port,
+		HostPort:       0, // no host port needed — Caddy reaches container via Docker DNS
+		NetworkName:    networkName,
+		NetworkAliases: []string{stableAlias},
+		MemoryMB:       memMB,
+		CPUs:           cpus,
+		RestartPolicy:  "unless-stopped",
 	})
 	if err != nil {
 		return fmt.Errorf("create container: %w", err)
@@ -291,8 +295,10 @@ func (p *Pipeline) Execute(ctx context.Context, dep *Deployment, progress io.Wri
 	fmt.Fprintf(progress, "[liteploy] Step 5/5: Configuring reverse proxy routes...\n")
 
 	if len(app.Domains) > 0 && app.Port > 0 {
-		upstream := fmt.Sprintf("%s:%d", containerName, app.Port)
-		fmt.Fprintf(progress, "[liteploy] Routing %v -> %s\n", app.Domains, upstream)
+		// Caddy runs in liteploy-network and resolves the stable alias via Docker DNS.
+		// Format: liteploy-{appID}:{containerPort}
+		upstream := fmt.Sprintf("liteploy-%s:%d", app.ID, app.Port)
+		fmt.Fprintf(progress, "[liteploy] Routing %v -> %s (Docker DNS)\n", app.Domains, upstream)
 		if err := p.proxyMgr.UpsertRoute(ctx, &proxy.Route{
 			AppID:    app.ID,
 			Domains:  app.Domains,

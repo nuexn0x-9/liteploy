@@ -178,7 +178,7 @@ fi
 cat <<EOF > "${ENV_FILE}"
 LITEPLOY_ADDR=:8080
 LITEPLOY_DATA_DIR=${DATA_DIR}
-LITEPLOY_CADDY_ADMIN=http://localhost:2019
+LITEPLOY_CADDY_ADMIN=http://127.0.0.1:2019
 LITEPLOY_SESSION_SECRET=${SESSION_SECRET}
 LITEPLOY_LOG_LEVEL=info
 LITEPLOY_LOG_JSON=true
@@ -186,6 +186,31 @@ EOF
 
 chmod 600 "${ENV_FILE}"
 log_ok "Environment configured in ${ENV_FILE} (chmod 600)"
+
+# 8a. Migrate from legacy caddy.service (host-level) to Docker container.
+#     Liteploy now manages Caddy as a Docker container on liteploy-network.
+if command -v systemctl > /dev/null 2>&1 && systemctl list-units --full --all 2>/dev/null | grep -q 'caddy.service'; then
+    log_warn "Legacy caddy.service detected — migrating to Docker container..."
+
+    # Backup existing Caddy config if present
+    if [ -d /etc/caddy ]; then
+        CADDY_BACKUP="/var/lib/liteploy/caddy-backup-$(date +%Y%m%d-%H%M%S)"
+        mkdir -p "${CADDY_BACKUP}"
+        cp -r /etc/caddy "${CADDY_BACKUP}/" 2>/dev/null || true
+        log_ok "Caddy config backed up to ${CADDY_BACKUP}"
+    fi
+
+    systemctl stop caddy.service 2>/dev/null || true
+    systemctl disable caddy.service 2>/dev/null || true
+    log_ok "Legacy caddy.service stopped and disabled"
+    log_info "Liteploy will start liteploy-caddy Docker container automatically on boot."
+fi
+
+# Pull Caddy image proactively so the first Liteploy start is fast.
+if command -v docker > /dev/null 2>&1; then
+    log_info "Pre-pulling Caddy Docker image (caddy:2-alpine)..."
+    docker pull caddy:2-alpine --quiet 2>/dev/null && log_ok "Caddy image ready" || log_warn "Could not pre-pull Caddy image — will pull on first start"
+fi
 
 # 8. Systemd Service Setup
 SERVICE_FILE="/etc/systemd/system/liteploy.service"
@@ -198,7 +223,6 @@ if command -v systemctl >/dev/null 2>&1; then
 Description=LITEPLOY - Lightweight Docker Deployment Platform
 After=network.target docker.service
 Requires=docker.service
-Wants=caddy.service
 
 [Service]
 Type=simple

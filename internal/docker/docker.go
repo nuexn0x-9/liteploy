@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 
 	dockerclient "github.com/docker/docker/client"
@@ -112,17 +113,29 @@ type ContainerInfo struct {
 
 // ContainerSpec defines a container to create.
 type ContainerSpec struct {
-	Name          string
-	Image         string
-	Env           []string // KEY=VALUE
-	Labels        map[string]string
-	Binds         []string // "/host/path:/container/path"
+	Name            string
+	Image           string
+	Cmd             []string   // optional override of image CMD
+	Env             []string   // KEY=VALUE
+	Labels          map[string]string
+	Binds           []string   // "/host/path:/container/path"
+	ContainerPort   int
+	HostPort        int        // 0 = no host port binding
+	HostIP          string     // bind host IP for port publishing, default "0.0.0.0"
+	ExtraPorts      []ExtraPortBinding // additional host-published ports (e.g. for Caddy :80/:443)
+	NetworkName     string
+	NetworkAliases  []string   // DNS aliases within NetworkName (Docker internal DNS)
+	MemoryMB        int64      // 0 = no limit
+	CPUs            float64    // 0 = no limit
+	RestartPolicy   string     // "no", "always", "on-failure", "unless-stopped"
+}
+
+// ExtraPortBinding defines an additional host-published port for a container.
+type ExtraPortBinding struct {
 	ContainerPort int
-	HostPort      int // 0 = assign randomly
-	NetworkName   string
-	MemoryMB      int64   // 0 = no limit
-	CPUs          float64 // 0 = no limit
-	RestartPolicy string  // "no", "always", "on-failure", "unless-stopped"
+	HostPort      int
+	HostIP        string  // "" = "0.0.0.0"
+	Protocol      string  // "tcp" or "udp", default "tcp"
 }
 
 // ListContainersOptions filters for ListContainers.
@@ -249,6 +262,21 @@ func (c *Client) InspectContainer(ctx context.Context, id string) (*ContainerInf
 		}
 	}
 
+	var ports []PortBinding
+	if info.NetworkSettings != nil && info.NetworkSettings.Ports != nil {
+		for containerPort, bindings := range info.NetworkSettings.Ports {
+			for _, b := range bindings {
+				hp, _ := strconv.Atoi(b.HostPort)
+				if hp > 0 {
+					ports = append(ports, PortBinding{
+						ContainerPort: containerPort.Int(),
+						HostPort:      hp,
+					})
+				}
+			}
+		}
+	}
+
 	return &ContainerInfo{
 		ID:        info.ID,
 		Name:      strings.TrimPrefix(info.Name, "/"),
@@ -256,6 +284,7 @@ func (c *Client) InspectContainer(ctx context.Context, id string) (*ContainerInf
 		ExitCode:  info.State.ExitCode,
 		Image:     info.Config.Image,
 		Labels:    info.Config.Labels,
+		Ports:     ports,
 		Health:    health,
 		IPAddress: ip,
 	}, nil
@@ -263,9 +292,39 @@ func (c *Client) InspectContainer(ctx context.Context, id string) (*ContainerInf
 
 // CreateContainer creates a container from a spec.
 func (c *Client) CreateContainer(ctx context.Context, spec ContainerSpec) (string, error) {
-	portSpec := ""
+	portBindings := nat.PortMap{}
+	exposedPorts := nat.PortSet{}
+
+	// Primary container port (no host binding if HostPort == 0)
 	if spec.ContainerPort > 0 {
-		portSpec = fmt.Sprintf("%d/tcp", spec.ContainerPort)
+		cPort := nat.Port(fmt.Sprintf("%d/tcp", spec.ContainerPort))
+		exposedPorts[cPort] = struct{}{}
+		if spec.HostPort > 0 {
+			hostIP := spec.HostIP
+			if hostIP == "" {
+				hostIP = "0.0.0.0"
+			}
+			portBindings[cPort] = []nat.PortBinding{
+				{HostIP: hostIP, HostPort: fmt.Sprintf("%d", spec.HostPort)},
+			}
+		}
+	}
+
+	// Additional published ports (e.g. Caddy :80, :443, :2019)
+	for _, ep := range spec.ExtraPorts {
+		proto := ep.Protocol
+		if proto == "" {
+			proto = "tcp"
+		}
+		cPort := nat.Port(fmt.Sprintf("%d/%s", ep.ContainerPort, proto))
+		exposedPorts[cPort] = struct{}{}
+		hostIP := ep.HostIP
+		if hostIP == "" {
+			hostIP = "0.0.0.0"
+		}
+		portBindings[cPort] = []nat.PortBinding{
+			{HostIP: hostIP, HostPort: fmt.Sprintf("%d", ep.HostPort)},
+		}
 	}
 
 	hostCfg := &container.HostConfig{
@@ -279,21 +338,11 @@ func (c *Client) CreateContainer(ctx context.Context, spec ContainerSpec) (strin
 			},
 		},
 	}
-
-	if spec.ContainerPort > 0 {
-		hostPort := ""
-		if spec.HostPort > 0 {
-			hostPort = fmt.Sprintf("%d", spec.HostPort)
-		}
-		hostCfg.PortBindings = nat.PortMap{
-			nat.Port(portSpec): []nat.PortBinding{
-				{HostIP: "127.0.0.1", HostPort: hostPort},
-			},
-		}
+	if len(portBindings) > 0 {
+		hostCfg.PortBindings = portBindings
 	}
 
-	// Apply resource limits if set, to prevent a single container from
-	// exhausting the shared 1 GB VPS RAM.
+	// Apply resource limits if set.
 	if spec.MemoryMB > 0 {
 		hostCfg.Memory = spec.MemoryMB * 1024 * 1024
 	}
@@ -302,20 +351,21 @@ func (c *Client) CreateContainer(ctx context.Context, spec ContainerSpec) (strin
 	}
 
 	containerCfg := &container.Config{
-		Image:  spec.Image,
-		Env:    spec.Env,
-		Labels: spec.Labels,
-	}
-	if portSpec != "" {
-		containerCfg.ExposedPorts = nat.PortSet{
-			nat.Port(portSpec): struct{}{},
-		}
+		Image:        spec.Image,
+		Cmd:          spec.Cmd,
+		Env:          spec.Env,
+		Labels:       spec.Labels,
+		ExposedPorts: exposedPorts,
 	}
 
 	networkCfg := &network.NetworkingConfig{}
 	if spec.NetworkName != "" {
+		eps := &network.EndpointSettings{}
+		if len(spec.NetworkAliases) > 0 {
+			eps.Aliases = spec.NetworkAliases
+		}
 		networkCfg.EndpointsConfig = map[string]*network.EndpointSettings{
-			spec.NetworkName: {},
+			spec.NetworkName: eps,
 		}
 	}
 

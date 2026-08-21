@@ -16,7 +16,10 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"path/filepath"
 	"time"
+
+	"github.com/liteploy/liteploy/internal/docker"
 )
 
 // Route describes a single domain-to-container reverse proxy mapping.
@@ -27,8 +30,104 @@ type Route struct {
 	// Domains is the list of hostnames routed to this application.
 	Domains []string
 
-	// Upstream is the backend address (e.g., "container-name:3000" or "127.0.0.1:PORT").
+	// Upstream is the backend address (e.g., "liteploy-app-001:3000").
+	// When Caddy runs inside Docker on liteploy-network, Docker DNS resolves
+	// container names and aliases directly — no host port required.
 	Upstream string
+}
+
+const (
+	// LiteployNetwork is the shared Docker network for Caddy and all app containers.
+	LiteployNetwork = "liteploy-network"
+	// CaddyContainerName is the stable name for the managed Caddy container.
+	CaddyContainerName = "liteploy-caddy"
+	// CaddyImage is the official Caddy image used.
+	CaddyImage = "caddy:2-alpine"
+)
+
+// EnsureCaddyContainer creates and starts the liteploy-caddy Docker container if it
+// does not already exist and is not running. This replaces the host-level caddy.service.
+//
+// Architecture:
+//   - liteploy-caddy joins liteploy-network
+//   - :80 and :443 are published to the host for HTTP/HTTPS traffic
+//   - :2019 is published to 127.0.0.1 only, so Liteploy (running on host) can
+//     still reach the Caddy Admin API without exposing it publicly
+//   - Caddy data (certificates) is persisted in dataDir/caddy
+//
+// All application containers should also join liteploy-network with an alias
+// so Caddy can resolve them via Docker DNS (e.g. "liteploy-app-001:3000").
+func EnsureCaddyContainer(ctx context.Context, dockerCli docker.Engine, dataDir string) error {
+	// 1. Ensure the shared network exists.
+	if _, err := dockerCli.EnsureNetwork(ctx, LiteployNetwork); err != nil {
+		return fmt.Errorf("proxy: ensure %s network: %w", LiteployNetwork, err)
+	}
+
+	// 2. Check if liteploy-caddy is already running.
+	containers, err := dockerCli.ListContainers(ctx, docker.ListContainersOptions{
+		All:    true,
+		Labels: map[string]string{"managed-by": "liteploy", "liteploy.role": "caddy"},
+	})
+	if err != nil {
+		return fmt.Errorf("proxy: list containers for caddy check: %w", err)
+	}
+	for _, c := range containers {
+		if c.Status == "running" {
+			return nil // Already running — nothing to do.
+		}
+		// Exists but not running — start it.
+		if err := dockerCli.StartContainer(ctx, c.ID); err != nil {
+			return fmt.Errorf("proxy: start existing caddy container: %w", err)
+		}
+		return nil
+	}
+
+	// 3. Pull the Caddy image (may already be cached).
+	if err := dockerCli.PullImage(ctx, CaddyImage, io.Discard); err != nil {
+		// Non-fatal: if already pulled, this is a no-op for most implementations.
+		// If it truly fails and the image is absent, ContainerCreate will fail below.
+		slog.Default().Warn("proxy: caddy image pull warning", "error", err)
+	}
+
+	// 4. Persistent data directory for TLS certificates.
+	caddyDataDir := filepath.Join(dataDir, "caddy")
+
+	// 5. Create the liteploy-caddy container.
+	_, err = dockerCli.CreateContainer(ctx, docker.ContainerSpec{
+		Name:  CaddyContainerName,
+		Image: CaddyImage,
+		// Run caddy with admin API bound to all interfaces inside the container.
+		// The admin port (2019) is only published to 127.0.0.1 on the host.
+		Cmd: []string{"caddy", "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"},
+		Env: []string{
+			"CADDY_ADMIN=0.0.0.0:2019",
+		},
+		Labels: map[string]string{
+			"managed-by":    "liteploy",
+			"liteploy.role": "caddy",
+		},
+		Binds: []string{
+			caddyDataDir + ":/data",
+		},
+		// No primary ContainerPort — all ports via ExtraPorts.
+		ExtraPorts: []docker.ExtraPortBinding{
+			{ContainerPort: 80, HostPort: 80, HostIP: "0.0.0.0"},
+			{ContainerPort: 443, HostPort: 443, HostIP: "0.0.0.0"},
+			// Admin API published only to localhost so Liteploy (on host) can manage Caddy.
+			{ContainerPort: 2019, HostPort: 2019, HostIP: "127.0.0.1"},
+		},
+		NetworkName:   LiteployNetwork,
+		RestartPolicy: "unless-stopped",
+	})
+	if err != nil {
+		return fmt.Errorf("proxy: create caddy container: %w", err)
+	}
+
+	if err := dockerCli.StartContainer(ctx, CaddyContainerName); err != nil {
+		return fmt.Errorf("proxy: start caddy container: %w", err)
+	}
+
+	return nil
 }
 
 // Manager manages Caddy configuration via the Admin API.

@@ -41,12 +41,22 @@ type DomainItem struct {
 	Status   application.Status
 }
 
+// resolveAppUpstream returns the Caddy upstream for an application.
+// Caddy runs inside liteploy-network and resolves the stable alias via Docker DNS.
+// Format: liteploy-{appID}:{containerPort}
+func (s *Server) resolveAppUpstream(_ context.Context, app *application.Application) string {
+	if app.Port > 0 {
+		return fmt.Sprintf("liteploy-%s:%d", app.ID, app.Port)
+	}
+	return ""
+}
+
 func (s *Server) handleDomainsList(w http.ResponseWriter, r *http.Request) {
 	apps := s.appSvc.List()
 	var domainItems []DomainItem
 
 	for _, app := range apps {
-		upstream := fmt.Sprintf("liteploy-%s:%d", app.ID, app.Port)
+		upstream := s.resolveAppUpstream(r.Context(), app)
 		for _, d := range app.Domains {
 			domainItems = append(domainItems, DomainItem{
 				Domain:   d,
@@ -186,13 +196,14 @@ func (s *Server) handleApplicationAddDomain(w http.ResponseWriter, r *http.Reque
 
 	// Update Caddy routing if app has container running
 	if app.Port > 0 {
-		containerName := fmt.Sprintf("liteploy-%s-%s", app.ID, app.LastDeploymentID)
-		upstream := fmt.Sprintf("%s:%d", containerName, app.Port)
-		_ = s.proxyMgr.UpsertRoute(r.Context(), &proxy.Route{
-			AppID:    app.ID,
-			Domains:  app.Domains,
-			Upstream: upstream,
-		})
+		upstream := s.resolveAppUpstream(r.Context(), app)
+		if upstream != "" {
+			_ = s.proxyMgr.UpsertRoute(r.Context(), &proxy.Route{
+				AppID:    app.ID,
+				Domains:  app.Domains,
+				Upstream: upstream,
+			})
+		}
 	}
 
 	http.Redirect(w, r, "/applications/"+id+"?msg=domain_added", http.StatusFound)
@@ -232,13 +243,14 @@ func (s *Server) handleApplicationDeleteDomain(w http.ResponseWriter, r *http.Re
 
 	// Update Caddy route
 	if len(app.Domains) > 0 && app.Port > 0 {
-		containerName := fmt.Sprintf("liteploy-%s-%s", app.ID, app.LastDeploymentID)
-		upstream := fmt.Sprintf("%s:%d", containerName, app.Port)
-		_ = s.proxyMgr.UpsertRoute(r.Context(), &proxy.Route{
-			AppID:    app.ID,
-			Domains:  app.Domains,
-			Upstream: upstream,
-		})
+		upstream := s.resolveAppUpstream(r.Context(), app)
+		if upstream != "" {
+			_ = s.proxyMgr.UpsertRoute(r.Context(), &proxy.Route{
+				AppID:    app.ID,
+				Domains:  app.Domains,
+				Upstream: upstream,
+			})
+		}
 	} else {
 		_ = s.proxyMgr.RemoveRoute(r.Context(), app.ID)
 	}
