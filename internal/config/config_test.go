@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -19,9 +20,11 @@ func TestLoad_Defaults(t *testing.T) {
 	if cfg.HTTPAddr != ":8080" {
 		t.Errorf("HTTPAddr = %q, want :8080", cfg.HTTPAddr)
 	}
-	if cfg.DataDir != "/var/lib/liteploy" {
-		t.Errorf("DataDir = %q, want /var/lib/liteploy", cfg.DataDir)
+	expectedDataDir, _ := filepath.Abs("/var/lib/liteploy")
+	if cfg.DataDir != expectedDataDir {
+		t.Errorf("DataDir = %q, want %q", cfg.DataDir, expectedDataDir)
 	}
+
 	if cfg.MaxConcurrentDeployments != 1 {
 		t.Errorf("MaxConcurrentDeployments = %d, want 1", cfg.MaxConcurrentDeployments)
 	}

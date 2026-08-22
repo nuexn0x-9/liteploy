@@ -44,16 +44,40 @@ At any time, navigate to **SYS CONFIG (Settings)** -> **PRIMARY DOMAIN & WILDCAR
 
 ---
 
-## 🚀 4. Mapping Domains to Applications
+## 🚀 4. Mapping Domains & Path Routing to Applications
 
-To route incoming traffic to a specific containerized app:
-1. Open the application detail page (e.g. `qulineria-api`).
-2. Under **🌐 Domains & Network**, enter your target hostname:
-   - If using wildcard DNS: enter `api.example.com` (ready instantly).
-   - If using a separate custom domain: enter `custom-client.org` (ensure `A` record points to your VPS IP).
-3. Click **+ Add Domain**.
-4. LITEPLOY immediately syncs routing tables to Caddy via `POST http://127.0.0.1:2019/load`.
-5. Caddy routes traffic directly to the container alias inside `liteploy-network` (e.g. `liteploy-app-001:8000`).
+LITEPLOY supports multiple deployment and routing topologies:
+
+### Topology A: Frontend Only
+- Application domain: `domain.com`
+- Port: `3000` (or `80`)
+- Routes all incoming traffic `/*` to your frontend application.
+
+### Topology B: Backend Only
+- Application domain: `api.domain.com` (or `domain.com`)
+- Port: `8000`
+- Routes requests to your backend API.
+
+### Topology C: Frontend + Backend on Separate Subdomains
+- Frontend App domain: `domain.com` (port `3000`)
+- Backend App domain: `api.domain.com` (port `8000`)
+- Frontend environment variable: `NEXT_PUBLIC_API_URL=https://api.domain.com`
+
+### Topology D: Frontend + Backend on the SAME Domain (One-Domain Routing)
+Host your entire stack on a single domain (e.g. `qulineria.my.id`) without CORS issues or multiple certificates:
+- **Backend App:**
+  - Route 1: `qulineria.my.id/api/*` (Container Port: `8000`)
+  - Route 2 (optional): `qulineria.my.id/assets/*` (Container Port: `8000` for uploaded files/static assets)
+- **Frontend App (Next.js / Vue / React):**
+  - Route: `qulineria.my.id` (or `qulineria.my.id/*`) (Container Port: `3000`)
+- **Frontend environment variable:**
+  ```env
+  NEXT_PUBLIC_API_URL=/api
+  ```
+  The browser calls `https://qulineria.my.id/api/products`, which Caddy immediately routes to `backend:8000`. All other paths (`/`, `/about`, `/dashboard`) are routed to `frontend:3000`.
+
+### 🔄 Automatic Route Ordering
+Caddy evaluates routes sequentially. LITEPLOY automatically places specific path routes (`/api/*`, `/assets/*`) **before** catch-all routes (`/*`) in the generated Caddy JSON configuration, guaranteeing accurate routing without 404 proxy leakage.
 
 ---
 
@@ -68,5 +92,8 @@ Click **◎ CHECK DNS** on the **NETWORK** page or application details to test l
 ## 🛡️ 6. Safety & Rollback Model
 
 Before applying any route changes to Caddy:
-1. LITEPLOY caches the current valid configuration.
-2. If Caddy returns an error during `/load`, LITEPLOY automatically rolls back to the last known good configuration without dropping active connections.
+1. LITEPLOY validates for duplicate `(host, path)` conflicts across applications.
+2. LITEPLOY verifies upstream addresses use internal Docker DNS (e.g. `liteploy-app-001:8000`).
+3. LITEPLOY saves the current known-good configuration.
+4. If Caddy returns an error during `/load`, LITEPLOY automatically rolls back to the last known good configuration without dropping active connections.
+

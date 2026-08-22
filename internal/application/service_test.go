@@ -163,3 +163,41 @@ func TestServicePersistenceAcrossReloads(t *testing.T) {
 		t.Errorf("Name = %q after reload, want persistent", got.Name)
 	}
 }
+
+func TestParseDomainRoute(t *testing.T) {
+	tests := []struct {
+		input        string
+		wantDomain   string
+		wantPath     string
+		expectErr    bool
+	}{
+		{"qulineria.my.id", "qulineria.my.id", "/*", false},
+		{"qulineria.my.id/api/*", "qulineria.my.id", "/api/*", false},
+		{"qulineria.my.id/api", "qulineria.my.id", "/api/*", false},
+		{"qulineria.my.id/assets/*", "qulineria.my.id", "/assets/*", false},
+		{"https://qulineria.my.id/api/products", "qulineria.my.id", "/api/products/*", false},
+		{"http://api.qulineria.my.id", "api.qulineria.my.id", "/*", false},
+		{"", "", "", true},
+	}
+
+	for _, tt := range tests {
+		domain, path, err := ParseDomainRoute(tt.input)
+		if tt.expectErr {
+			if err == nil {
+				t.Errorf("ParseDomainRoute(%q) expected error, got nil", tt.input)
+			}
+			continue
+		}
+		if err != nil {
+			t.Errorf("ParseDomainRoute(%q) unexpected error: %v", tt.input, err)
+			continue
+		}
+		if domain != tt.wantDomain {
+			t.Errorf("ParseDomainRoute(%q) domain = %q, want %q", tt.input, domain, tt.wantDomain)
+		}
+		if path != tt.wantPath {
+			t.Errorf("ParseDomainRoute(%q) path = %q, want %q", tt.input, path, tt.wantPath)
+		}
+	}
+}
+

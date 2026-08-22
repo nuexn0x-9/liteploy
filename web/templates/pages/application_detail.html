@@ -261,20 +261,22 @@
             </div>
             {{end}}
 
-            <form method="POST" action="/applications/{{.App.ID}}/domains" class="form-inline mb-4">
+            <form method="POST" action="/applications/{{.App.ID}}/domains" class="form-inline mb-4" style="display:flex; gap:0.5rem; flex-wrap:wrap;">
                 <input type="hidden" name="_csrf" value="{{if .Session}}{{.Session.CSRFToken}}{{end}}">
-                <div class="form-group flex-1">
-                    <input type="text" name="domain" placeholder="{{if .Settings.PrimaryDomain}}{{.App.Name}}.{{.Settings.PrimaryDomain}}{{else}}e.g. app.yourdomain.com{{end}}" required
-                        pattern="^([a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$">
+                <div class="form-group" style="flex:2; min-width:200px;">
+                    <input type="text" name="domain" placeholder="{{if .Settings.PrimaryDomain}}{{.App.Name}}.{{.Settings.PrimaryDomain}}{{else}}e.g. app.yourdomain.com{{end}}" required>
                 </div>
-                <button type="submit" class="btn btn-secondary">[ + ADD DOMAIN ]</button>
+                <div class="form-group" style="flex:1; min-width:140px;">
+                    <input type="text" name="path" placeholder="Path (e.g. /api/* or blank)">
+                </div>
+                <button type="submit" class="btn btn-secondary">[ + ADD ROUTE ]</button>
             </form>
 
             {{if .App.Domains}}
             <table class="table" role="table">
                 <thead>
                     <tr>
-                        <th>DOMAIN</th>
+                        <th>DOMAIN / ROUTE</th>
                         <th>UPSTREAM TARGET</th>
                         <th>DNS STATUS</th>
                         <th>ACTION</th>
@@ -309,6 +311,7 @@
             <p class="empty">No domains configured yet. Add your domain above to enable HTTPS routing.</p>
             {{end}}
         </section>
+
 
         <!-- Environment Variables -->
         <section class="card mt-4">

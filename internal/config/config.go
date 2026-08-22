@@ -6,6 +6,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"time"
 )
@@ -48,9 +49,14 @@ type Config struct {
 // Load reads configuration from environment variables.
 // Missing required values cause an error; missing optional values use defaults.
 func Load() (*Config, error) {
+	dataDir := envString("LITEPLOY_DATA_DIR", "/var/lib/liteploy")
+	if abs, err := filepath.Abs(dataDir); err == nil {
+		dataDir = abs
+	}
+
 	cfg := &Config{
 		HTTPAddr:                 envString("LITEPLOY_HTTP_ADDR", ":8080"),
-		DataDir:                  envString("LITEPLOY_DATA_DIR", "/var/lib/liteploy"),
+		DataDir:                  dataDir,
 		LogLevel:                 envString("LITEPLOY_LOG_LEVEL", "info"),
 		LogJSON:                  envBool("LITEPLOY_LOG_JSON", false),
 		DockerHost:               envString("LITEPLOY_DOCKER_HOST", ""),
@@ -63,6 +69,7 @@ func Load() (*Config, error) {
 		GitTimeout:               envDuration("LITEPLOY_GIT_TIMEOUT", 10*time.Minute),
 		DevMode:                  envBool("LITEPLOY_DEV_MODE", false),
 	}
+
 
 	if err := cfg.validate(); err != nil {
 		return nil, fmt.Errorf("config: %w", err)

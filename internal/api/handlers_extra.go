@@ -35,6 +35,8 @@ func (s *Server) handleDeploymentsList(w http.ResponseWriter, r *http.Request) {
 
 type DomainItem struct {
 	Domain   string
+	Path     string
+	Raw      string
 	AppID    string
 	AppName  string
 	Upstream string
@@ -58,8 +60,15 @@ func (s *Server) handleDomainsList(w http.ResponseWriter, r *http.Request) {
 	for _, app := range apps {
 		upstream := s.resolveAppUpstream(r.Context(), app)
 		for _, d := range app.Domains {
+			host, path, _ := application.ParseDomainRoute(d)
+			if host == "" {
+				host = d
+				path = "/*"
+			}
 			domainItems = append(domainItems, DomainItem{
-				Domain:   d,
+				Domain:   host,
+				Path:     path,
+				Raw:      d,
 				AppID:    app.ID,
 				AppName:  app.Name,
 				Upstream: upstream,
@@ -174,35 +183,58 @@ func (s *Server) handleApplicationAddDomain(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	newDomain := strings.TrimSpace(strings.ToLower(r.FormValue("domain")))
-	if newDomain == "" {
+	rawDomain := strings.TrimSpace(strings.ToLower(r.FormValue("domain")))
+	rawPath := strings.TrimSpace(r.FormValue("path"))
+
+	if rawDomain == "" {
 		http.Redirect(w, r, "/applications/"+id+"?error=domain_empty", http.StatusFound)
 		return
 	}
 
-	// Check if domain already exists on app
+	// Parse domain and path
+	var fullEntry string
+	if rawPath != "" && rawPath != "/*" && rawPath != "/" {
+		normPath := application.NormalizePath(rawPath)
+		host, _, _ := application.ParseDomainRoute(rawDomain)
+		if host != "" {
+			fullEntry = host + normPath
+		} else {
+			fullEntry = rawDomain + normPath
+		}
+	} else {
+		host, path, _ := application.ParseDomainRoute(rawDomain)
+		if path != "" && path != "/*" {
+			fullEntry = host + path
+		} else {
+			fullEntry = host
+		}
+	}
+
+	// Check if domain/path already exists on this app
 	for _, d := range app.Domains {
-		if d == newDomain {
+		if d == fullEntry {
 			http.Redirect(w, r, "/applications/"+id+"?msg=domain_exists", http.StatusFound)
 			return
 		}
 	}
 
-	app.Domains = append(app.Domains, newDomain)
+	app.Domains = append(app.Domains, fullEntry)
 	if err := s.appSvc.Update(r.Context(), app); err != nil {
 		http.Redirect(w, r, "/applications/"+id+"?error="+err.Error(), http.StatusFound)
 		return
 	}
 
 	// Update Caddy routing if app has container running
-	if app.Port > 0 {
+	if app.Port > 0 && app.Status == application.StatusRunning {
 		upstream := s.resolveAppUpstream(r.Context(), app)
 		if upstream != "" {
-			_ = s.proxyMgr.UpsertRoute(r.Context(), &proxy.Route{
+			if err := s.proxyMgr.UpsertRoute(r.Context(), &proxy.Route{
 				AppID:    app.ID,
 				Domains:  app.Domains,
 				Upstream: upstream,
-			})
+			}); err != nil {
+				s.logger.Warn("caddy upsert route warning", "error", err)
+			}
 		}
 	}
 
@@ -242,7 +274,7 @@ func (s *Server) handleApplicationDeleteDomain(w http.ResponseWriter, r *http.Re
 	}
 
 	// Update Caddy route
-	if len(app.Domains) > 0 && app.Port > 0 {
+	if len(app.Domains) > 0 && app.Port > 0 && app.Status == application.StatusRunning {
 		upstream := s.resolveAppUpstream(r.Context(), app)
 		if upstream != "" {
 			_ = s.proxyMgr.UpsertRoute(r.Context(), &proxy.Route{
@@ -251,7 +283,7 @@ func (s *Server) handleApplicationDeleteDomain(w http.ResponseWriter, r *http.Re
 				Upstream: upstream,
 			})
 		}
-	} else {
+	} else if len(app.Domains) == 0 {
 		_ = s.proxyMgr.RemoveRoute(r.Context(), app.ID)
 	}
 
@@ -305,8 +337,15 @@ func (s *Server) handleAPIListDomains(w http.ResponseWriter, r *http.Request) {
 	var domains []map[string]any
 	for _, app := range apps {
 		for _, d := range app.Domains {
+			host, path, _ := application.ParseDomainRoute(d)
+			if host == "" {
+				host = d
+				path = "/*"
+			}
 			domains = append(domains, map[string]any{
-				"domain":   d,
+				"domain":   host,
+				"path":     path,
+				"raw":      d,
 				"app_id":   app.ID,
 				"app_name": app.Name,
 				"port":     app.Port,
@@ -319,10 +358,15 @@ func (s *Server) handleAPIListDomains(w http.ResponseWriter, r *http.Request) {
 
 // handleAPIDNSCheck checks DNS resolution for a domain
 func (s *Server) handleAPIDNSCheck(w http.ResponseWriter, r *http.Request) {
-	domain := r.URL.Query().Get("domain")
-	if domain == "" {
+	rawDomain := r.URL.Query().Get("domain")
+	if rawDomain == "" {
 		apiError(w, "domain parameter required", http.StatusBadRequest)
 		return
+	}
+
+	domain, _, _ := application.ParseDomainRoute(rawDomain)
+	if domain == "" {
+		domain = rawDomain
 	}
 
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
@@ -345,3 +389,4 @@ func (s *Server) handleAPIDNSCheck(w http.ResponseWriter, r *http.Request) {
 		"ips":      ips,
 	})
 }
+

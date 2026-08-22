@@ -160,8 +160,13 @@ func (a *Application) Validate() error {
 	}
 
 	for _, d := range a.Domains {
-		if err := validateDomain(d); err != nil {
-			errs = append(errs, fmt.Sprintf("domain %q: %v", d, err))
+		host, _, err := ParseDomainRoute(d)
+		if err != nil {
+			errs = append(errs, fmt.Sprintf("domain entry %q: %v", d, err))
+			continue
+		}
+		if err := validateDomain(host); err != nil {
+			errs = append(errs, fmt.Sprintf("domain %q: %v", host, err))
 		}
 	}
 
@@ -200,6 +205,8 @@ func validateSource(s Source) error {
 			!strings.HasPrefix(lower, "ssh://") {
 			return errors.New("git_url must use https://, http://, git@, or ssh:// scheme")
 		}
+
+
 	case SourceImage:
 		if s.ImageRef == "" {
 			return errors.New("image_ref is required for image source")
@@ -230,3 +237,66 @@ func validateDomain(d string) error {
 	}
 	return nil
 }
+
+// ParseDomainRoute parses a domain entry string which can be a domain only ("example.com"),
+// or a domain with path ("example.com/api/*", "example.com/assets/*", "example.com/api").
+// Returns normalized host (lowercase, without scheme or trailing slashes) and normalized path.
+func ParseDomainRoute(entry string) (host string, path string, err error) {
+	entry = strings.TrimSpace(entry)
+	if entry == "" {
+		return "", "", errors.New("domain cannot be empty")
+	}
+
+	// Strip http:// or https:// if user pasted a full URL
+	lower := strings.ToLower(entry)
+	if strings.HasPrefix(lower, "http://") {
+		entry = entry[7:]
+	} else if strings.HasPrefix(lower, "https://") {
+		entry = entry[8:]
+	}
+
+	var rawHost, rawPath string
+	if idx := strings.Index(entry, "/"); idx != -1 {
+		rawHost = entry[:idx]
+		rawPath = entry[idx:]
+	} else {
+		rawHost = entry
+		rawPath = "/*"
+	}
+
+	rawHost = strings.TrimSpace(strings.ToLower(rawHost))
+	// Strip port if present in hostname (e.g. example.com:80)
+	if strings.Contains(rawHost, ":") {
+		parts := strings.Split(rawHost, ":")
+		rawHost = parts[0]
+	}
+
+	normPath := NormalizePath(rawPath)
+	return rawHost, normPath, nil
+}
+
+// NormalizePath normalizes a URL path pattern.
+// E.g. "" -> "/*", "/" -> "/*", "/*" -> "/*", "/api" -> "/api/*", "/api/" -> "/api/*", "/api/*" -> "/api/*".
+func NormalizePath(p string) string {
+	p = strings.TrimSpace(p)
+	if p == "" || p == "/" || p == "/*" {
+		return "/*"
+	}
+	if !strings.HasPrefix(p, "/") {
+		p = "/" + p
+	}
+	if strings.HasSuffix(p, "/*") {
+		cleanPrefix := strings.TrimSuffix(p, "/*")
+		cleanPrefix = strings.TrimRight(cleanPrefix, "/")
+		if cleanPrefix == "" {
+			return "/*"
+		}
+		return cleanPrefix + "/*"
+	}
+	p = strings.TrimRight(p, "/")
+	if p == "" {
+		return "/*"
+	}
+	return p + "/*"
+}
+

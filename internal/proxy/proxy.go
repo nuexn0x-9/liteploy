@@ -12,28 +12,43 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
+	"strconv"
+	"strings"
 	"time"
 
+	"github.com/liteploy/liteploy/internal/application"
 	"github.com/liteploy/liteploy/internal/docker"
 )
 
-// Route describes a single domain-to-container reverse proxy mapping.
+// Route describes a single domain/path-to-container reverse proxy mapping.
 type Route struct {
 	// AppID identifies which application owns this route.
 	AppID string
 
-	// Domains is the list of hostnames routed to this application.
+	// Domains is the list of hostnames / path patterns routed to this application.
+	// Supports plain hostnames ("example.com") and path patterns ("example.com/api/*", "example.com/assets/*").
 	Domains []string
 
-	// Upstream is the backend address (e.g., "liteploy-app-001:3000").
+	// Upstream is the internal backend address (e.g., "liteploy-app-001:3000").
 	// When Caddy runs inside Docker on liteploy-network, Docker DNS resolves
 	// container names and aliases directly — no host port required.
+	Upstream string
+}
+
+// caddyRouteItem is an internal normalized route item for building Caddy config.
+type caddyRouteItem struct {
+	AppID    string
+	Host     string
+	Path     string // e.g. "/api/*", "/assets/*", "/*"
 	Upstream string
 }
 
@@ -191,16 +206,107 @@ func (m *Manager) GetDashboardDomain() string {
 	return m.dashboardDomain
 }
 
+// Validate checks all currently configured routes for conflicts and validity.
+func (m *Manager) Validate() error {
+	return ValidateRoutes(m.routes)
+}
+
+// ValidateUpstream verifies that upstream is a valid internal address (host:port).
+// Rejects loopback addresses (localhost/127.0.0.1) for app containers.
+func ValidateUpstream(upstream string) error {
+	upstream = strings.TrimSpace(upstream)
+	if upstream == "" {
+		return errors.New("upstream is empty")
+	}
+	host, portStr, err := net.SplitHostPort(upstream)
+	if err != nil {
+		return fmt.Errorf("invalid upstream format %q (expected host:port): %w", upstream, err)
+	}
+	if host == "" {
+		return errors.New("upstream host is empty")
+	}
+	if host == "localhost" || host == "127.0.0.1" || host == "0.0.0.0" {
+		return fmt.Errorf("app upstream %q cannot dial loopback/host; must use internal Docker DNS", upstream)
+	}
+	port, err := strconv.Atoi(portStr)
+	if err != nil || port <= 0 || port > 65535 {
+		return fmt.Errorf("invalid upstream port %q", portStr)
+	}
+	return nil
+}
+
+// ValidateRoute validates a single Route specification.
+func ValidateRoute(r *Route) error {
+	if r == nil {
+		return errors.New("route is nil")
+	}
+	if r.AppID == "" {
+		return errors.New("route app_id is required")
+	}
+	if len(r.Domains) == 0 {
+		return fmt.Errorf("route for app %q has no domains", r.AppID)
+	}
+	if err := ValidateUpstream(r.Upstream); err != nil {
+		return fmt.Errorf("route for app %q: %w", r.AppID, err)
+	}
+	for _, d := range r.Domains {
+		host, _, err := application.ParseDomainRoute(d)
+		if err != nil {
+			return fmt.Errorf("route for app %q domain %q: %w", r.AppID, d, err)
+		}
+		if host == "" {
+			return fmt.Errorf("route for app %q domain %q has empty host", r.AppID, d)
+		}
+	}
+	return nil
+}
+
+// ValidateRoutes checks a map of routes for format correctness and duplicate collisions across apps.
+func ValidateRoutes(routes map[string]*Route) error {
+	type routeKey struct {
+		host string
+		path string
+	}
+	seen := make(map[routeKey]string) // routeKey -> appID
+
+	for appID, r := range routes {
+		if err := ValidateRoute(r); err != nil {
+			return err
+		}
+		for _, d := range r.Domains {
+			host, path, err := application.ParseDomainRoute(d)
+			if err != nil {
+				return fmt.Errorf("app %q has invalid domain %q: %w", appID, d, err)
+			}
+			k := routeKey{host: host, path: path}
+			if existingAppID, exists := seen[k]; exists && existingAppID != appID {
+				return fmt.Errorf("route conflict on host %q path %q between app %q and app %q", host, path, existingAppID, appID)
+			}
+			seen[k] = appID
+		}
+	}
+	return nil
+}
+
 // UpsertRoute adds or updates a route for an application, then applies to Caddy.
 func (m *Manager) UpsertRoute(ctx context.Context, route *Route) error {
-	if len(route.Domains) == 0 {
-		return fmt.Errorf("proxy: route for app %q has no domains", route.AppID)
-	}
-	if route.Upstream == "" {
-		return fmt.Errorf("proxy: route for app %q has no upstream", route.AppID)
+	if err := ValidateRoute(route); err != nil {
+		return fmt.Errorf("proxy: invalid route: %w", err)
 	}
 
+	// Stash old route in case of validation failure
+	oldRoute := m.routes[route.AppID]
 	m.routes[route.AppID] = route
+
+	if err := m.Validate(); err != nil {
+		if oldRoute != nil {
+			m.routes[route.AppID] = oldRoute
+		} else {
+			delete(m.routes, route.AppID)
+		}
+		return fmt.Errorf("proxy: route validation failed: %w", err)
+	}
+
 	return m.apply(ctx)
 }
 
@@ -213,6 +319,10 @@ func (m *Manager) RemoveRoute(ctx context.Context, appID string) error {
 // apply generates and pushes the full Caddy config derived from current routes.
 // Caddy Admin API supports atomic full config replacement at /load.
 func (m *Manager) apply(ctx context.Context) error {
+	if err := m.Validate(); err != nil {
+		return fmt.Errorf("proxy: cannot apply invalid routes: %w", err)
+	}
+
 	cfg := m.buildCaddyConfig()
 
 	data, err := json.Marshal(cfg)
@@ -272,35 +382,63 @@ func (m *Manager) Ping(ctx context.Context) error {
 }
 
 // buildCaddyConfig generates the full Caddy JSON configuration from current routes.
-// This uses Caddy's native config format (not Caddyfile).
+// Route Ordering Rule:
+// 1. Dashboard route (if set)
+// 2. Specific path routes (/api/*, /assets/*) ordered by path length descending, then host/path
+// 3. Generic / Catch-all routes (/*) ordered by host
+// This guarantees that path-specific routes match before catch-all routes in Caddy's sequential evaluation.
 func (m *Manager) buildCaddyConfig() map[string]any {
-	var routes []map[string]any
+	var specificRoutes []caddyRouteItem
+	var catchAllRoutes []caddyRouteItem
 
-	// 1. Application routes
-	for _, route := range m.routes {
+	for appID, route := range m.routes {
 		if len(route.Domains) == 0 || route.Upstream == "" {
 			continue
 		}
-
-		// Build a Caddy route matching the domains and proxying to the upstream.
-		r := map[string]any{
-			"match": []map[string]any{
-				{"host": route.Domains},
-			},
-			"handle": []map[string]any{
-				{
-					"handler": "reverse_proxy",
-					"upstreams": []map[string]any{
-						{"dial": route.Upstream},
-					},
-				},
-			},
-			"terminal": true,
+		for _, d := range route.Domains {
+			host, path, err := application.ParseDomainRoute(d)
+			if err != nil || host == "" {
+				continue
+			}
+			item := caddyRouteItem{
+				AppID:    appID,
+				Host:     host,
+				Path:     path,
+				Upstream: route.Upstream,
+			}
+			if path == "/*" || path == "" {
+				catchAllRoutes = append(catchAllRoutes, item)
+			} else {
+				specificRoutes = append(specificRoutes, item)
+			}
 		}
-		routes = append(routes, r)
 	}
 
-	// 2. LITEPLOY dashboard route (e.g. liteploy.example.com -> 127.0.0.1:8080)
+	// Sort specific routes: longest path first, then host, path, appID
+	sort.Slice(specificRoutes, func(i, j int) bool {
+		if len(specificRoutes[i].Path) != len(specificRoutes[j].Path) {
+			return len(specificRoutes[i].Path) > len(specificRoutes[j].Path)
+		}
+		if specificRoutes[i].Host != specificRoutes[j].Host {
+			return specificRoutes[i].Host < specificRoutes[j].Host
+		}
+		if specificRoutes[i].Path != specificRoutes[j].Path {
+			return specificRoutes[i].Path < specificRoutes[j].Path
+		}
+		return specificRoutes[i].AppID < specificRoutes[j].AppID
+	})
+
+	// Sort catch-all routes: host, then appID
+	sort.Slice(catchAllRoutes, func(i, j int) bool {
+		if catchAllRoutes[i].Host != catchAllRoutes[j].Host {
+			return catchAllRoutes[i].Host < catchAllRoutes[j].Host
+		}
+		return catchAllRoutes[i].AppID < catchAllRoutes[j].AppID
+	})
+
+	var routes []map[string]any
+
+	// 1. Dashboard route (e.g. liteploy.example.com -> 127.0.0.1:8080)
 	if m.dashboardDomain != "" && m.dashboardTarget != "" {
 		dashRoute := map[string]any{
 			"match": []map[string]any{
@@ -317,6 +455,55 @@ func (m *Manager) buildCaddyConfig() map[string]any {
 			"terminal": true,
 		}
 		routes = append(routes, dashRoute)
+	}
+
+	// 2. Specific path routes (e.g. /api/*, /assets/*)
+	for _, item := range specificRoutes {
+		prefix := strings.TrimSuffix(item.Path, "/*")
+		var pathPatterns []string
+		if prefix != "" && prefix != "/" {
+			pathPatterns = []string{item.Path, prefix}
+		} else {
+			pathPatterns = []string{item.Path}
+		}
+
+		r := map[string]any{
+			"match": []map[string]any{
+				{
+					"host": []string{item.Host},
+					"path": pathPatterns,
+				},
+			},
+			"handle": []map[string]any{
+				{
+					"handler": "reverse_proxy",
+					"upstreams": []map[string]any{
+						{"dial": item.Upstream},
+					},
+				},
+			},
+			"terminal": true,
+		}
+		routes = append(routes, r)
+	}
+
+	// 3. Catch-all application routes (e.g. domain.com/*)
+	for _, item := range catchAllRoutes {
+		r := map[string]any{
+			"match": []map[string]any{
+				{"host": []string{item.Host}},
+			},
+			"handle": []map[string]any{
+				{
+					"handler": "reverse_proxy",
+					"upstreams": []map[string]any{
+						{"dial": item.Upstream},
+					},
+				},
+			},
+			"terminal": true,
+		}
+		routes = append(routes, r)
 	}
 
 	return map[string]any{
@@ -345,3 +532,4 @@ func (m *Manager) GetRoutes() map[string]*Route {
 	}
 	return result
 }
+

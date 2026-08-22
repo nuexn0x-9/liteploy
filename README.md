@@ -64,10 +64,12 @@ Traditional self-hosted deployment panels often ship with PostgreSQL, Redis, bac
 
 - **⚡ Lightweight Footprint:** Observed idle memory footprint of **~18.5 MB RSS** in internal testing.
 - **🎨 Retro 8-bit Console UI:** A fast, responsive, game-inspired HTMX control panel with mobile sidebar support.
+- **🌐 One-Domain & Path Routing:** Route multiple services on the same domain (`domain.com` → frontend, `domain.com/api/*` → backend, `domain.com/assets/*` → backend static assets) with automatic Caddy route ordering.
 - **🌐 Primary Domain & Wildcard Subdomains:** Set your root domain once (`example.com`), route your dashboard to `liteploy.example.com`, and deploy applications to any subdomain (`app.example.com`, `api.example.com`) instantly with automatic Caddy TLS.
 - **🧙‍♂️ Initial Setup Wizard:** Guided 2-step onboarding to create admin credentials and configure wildcard DNS with 1-click DNS verification.
-- **📦 Zero-Downtime HTTP Healthchecks:** Validates container HTTP endpoints before switching traffic.
+- **📦 Zero-Downtime HTTP Healthchecks:** Validates container HTTP endpoints before switching traffic and gracefully tears down old containers.
 - **♻️ 1-Click Rollbacks:** Instantly revert to a previous successful image deployment in seconds.
+- **🖥️ Native CLI Commands:** Built-in CLI operations (`liteploy status`, `liteploy deploy <app>`, `liteploy logs <app>`) for headless server management.
 - **💾 1-Click Backup & VPS Migration:** Export and import full platform state as a portable `.tar.gz` archive.
 - **📈 Live Container Metrics:** Real-time CPU and RAM monitoring straight from Docker Stats API.
 - **🧹 System Auto-Prune & Retention:** Built-in garbage collection and automatic pruning of old/failed deployment logs.
@@ -79,6 +81,7 @@ Traditional self-hosted deployment panels often ship with PostgreSQL, Redis, bac
 - **🔗 Automated Webhooks:** Automatic deployment triggers on `git push` with HMAC-SHA256 signatures.
 - **🛡️ Hardened Security:** Cryptographic session secrets, `/etc/liteploy/liteploy.env` with `0600` permissions, CSRF tokens, bcrypt password hashing.
 - **🔧 Automatic Startup Recovery:** Reconciles container states and proxy routes automatically on VPS reboot.
+
 
 ---
 

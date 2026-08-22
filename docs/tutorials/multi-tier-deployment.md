@@ -65,25 +65,43 @@ Assuming your Database App ID was `abc12345`, the connection string is:
 3. Add: `PORT=3000`
 4. Click **Save Environment Variables**.
 
-### Map Custom Domain
+### Map Custom Domain / Route
+You have two architectural options:
+
+#### Option A: Separate Subdomain
 1. In the **Domains** section, add `api.yourdomain.com`.
 2. Ensure your DNS `A` record points to your VPS IP.
 
+#### Option B: Same Domain (One-Domain Routing)
+1. In the **Domains** section, enter Domain `yourdomain.com` and Path `/api/*` (and optionally `yourdomain.com/assets/*` for static files).
+2. The route `yourdomain.com/api/*` will be registered to forward directly to your backend container on port 8000.
+
 ### Deploy the Backend
 Click **Deploy Now**. LITEPLOY will clone your repo, build the Dockerfile, and start the container.
-Once successful, you can visit `https://api.yourdomain.com` in your browser. Caddy will automatically secure it with HTTPS!
+Once successful, your API is reachable via HTTPS!
 
 ---
 
 ## Step 3: Deploy the Frontend (React / Vue / Next.js)
 
-The process for the frontend is identical to the backend.
+The process for the frontend is identical:
 
 1. Create a new Application (e.g., `web-frontend`).
 2. Point it to your Frontend Git Repository.
-3. Set the Container Port (e.g., `80` if using NGINX, or `3000` for Next.js).
-4. In **Environment Variables**, provide your backend URL (e.g., `NEXT_PUBLIC_API_URL=https://api.yourdomain.com`).
-5. Map a custom domain (e.g., `www.yourdomain.com`).
+3. Set the Container Port (e.g., `3000` for Next.js or Node, `80` for NGINX).
+4. Configure **Environment Variables**:
+   - **If using Single Domain setup:**
+     ```env
+     NEXT_PUBLIC_API_URL=/api
+     ```
+     *(The browser calls `/api/products` on the same domain, which Caddy proxies to the backend without CORS or port issues).*
+   - **If using Subdomain setup:**
+     ```env
+     NEXT_PUBLIC_API_URL=https://api.yourdomain.com
+     ```
+5. Map domain:
+   - For Single Domain: `yourdomain.com` (leave Path empty or `/*`)
+   - For Subdomain: `www.yourdomain.com` or `app.yourdomain.com`
 6. Click **Deploy Now**.
 
 ---
@@ -91,6 +109,7 @@ The process for the frontend is identical to the backend.
 ## 💡 Summary
 
 You have successfully deployed a 3-tier application!
-- **Database:** Runs securely in the background. Data is safe via Persistent Volumes. Not exposed to the public internet.
-- **Backend:** Communicates with the Database via internal Docker DNS. Exposed to the internet via Caddy with auto-HTTPS.
-- **Frontend:** Exposed to the internet via Caddy with auto-HTTPS. Communicates with the Backend via the public HTTPS API.
+- **Database:** Runs securely in the background on `liteploy-network`. Data is safe via Persistent Volumes. Not exposed to the public internet.
+- **Backend:** Communicates with the Database via internal Docker DNS (`liteploy-<appID>:5432`). Exposed to the internet via Caddy with auto-HTTPS.
+- **Frontend:** Exposed to the internet via Caddy with auto-HTTPS. Communicates with the Backend seamlessly either on the same domain (`/api/*`) or via subdomain (`api.domain.com`).
+

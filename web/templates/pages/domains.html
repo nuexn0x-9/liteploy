@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -102,6 +102,7 @@
                 <thead>
                     <tr>
                         <th>DOMAIN</th>
+                        <th>PATH</th>
                         <th>APPLICATION</th>
                         <th>UPSTREAM</th>
                         <th>STATUS</th>
@@ -113,6 +114,7 @@
                     {{range .Domains}}
                     <tr>
                         <td><strong class="domain-title">{{.Domain}}</strong></td>
+                        <td><code>{{.Path}}</code></td>
                         <td>
                             <a href="/applications/{{.AppID}}" class="app-link">{{.AppName}} <span class="text-muted text-xs">({{.AppID}})</span></a>
                         </td>
@@ -136,6 +138,7 @@
                     {{end}}
                 </tbody>
             </table>
+
         </div>
         {{else}}
         <div class="empty-state">

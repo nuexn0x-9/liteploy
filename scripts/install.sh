@@ -274,27 +274,45 @@ EOF
     systemctl restart liteploy.service
 
     # 9. Strict Service Health Check
-    log_info "Verifying service health..."
+    log_info "Verifying service health and subsystems..."
     HEALTHY=false
-    for i in $(seq 1 15); do
+    for i in $(seq 1 20); do
         sleep 1
         
-        # Check systemd active status
+        # 1. Check systemd active status
         if ! systemctl is-active --quiet liteploy; then
             continue
         fi
 
-        # Check HTTP response code (accept 200, 302, etc.)
-        HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8080/ 2>/dev/null || echo "000")
-        if [ "$HTTP_CODE" != "000" ] && [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 500 ]; then
-            HEALTHY=true
-            break
+        # 2. Check Liteploy HTTP response code (/health or /)
+        HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8080/health 2>/dev/null || curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8080/ 2>/dev/null || echo "000")
+        if [ "$HTTP_CODE" = "000" ] || [ "$HTTP_CODE" -ge 500 ]; then
+            continue
         fi
+
+        # 3. Check Caddy Admin API
+        CADDY_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:2019/config/ 2>/dev/null || echo "000")
+        if [ "$CADDY_CODE" != "200" ]; then
+            continue
+        fi
+
+        # 4. Check Docker network
+        if ! docker network inspect liteploy-network >/dev/null 2>&1; then
+            continue
+        fi
+
+        # 5. Check Caddy container running
+        if ! docker ps --format '{{.Names}}' | grep -q '^liteploy-caddy$'; then
+            continue
+        fi
+
+        HEALTHY=true
+        break
     done
 
     if [ "$HEALTHY" = false ]; then
         echo ""
-        echo -e "${RED}[ERROR] Liteploy failed to start or did not respond on http://127.0.0.1:8080/${NC}"
+        echo -e "${RED}[ERROR] LITEPLOY health verification failed.${NC}"
         echo ""
         echo -e "${YELLOW}--- systemctl status liteploy ---${NC}"
         systemctl status liteploy --no-pager || true
@@ -302,10 +320,15 @@ EOF
         echo -e "${YELLOW}--- journalctl -u liteploy -n 50 ---${NC}"
         journalctl -u liteploy -n 50 --no-pager || true
         echo ""
+        echo -e "${YELLOW}--- docker ps ---${NC}"
+        docker ps || true
+        echo ""
         exit 1
     fi
 
-    log_ok "Liteploy service is healthy and responding"
+    log_ok "Liteploy HTTP service is healthy (:8080)"
+    log_ok "Caddy reverse proxy container is healthy (:2019, :80, :443)"
+    log_ok "Shared Docker network (liteploy-network) is active"
 else
     log_warn "systemd not detected. Please run LITEPLOY manually using: ${TARGET_BIN}"
 fi
@@ -323,3 +346,4 @@ echo -e "Data Storage:  ${DATA_DIR}"
 echo -e "Service Logs:  sudo journalctl -u liteploy -f"
 echo -e "=================================================="
 echo ""
+

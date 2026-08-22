@@ -28,7 +28,9 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/liteploy/liteploy/internal/application"
@@ -156,6 +158,14 @@ func (p *Pipeline) Execute(ctx context.Context, dep *Deployment, progress io.Wri
 	// -------------------------------------------------------------
 	// Step 2: BUILDING (Image creation / pull)
 	// -------------------------------------------------------------
+	// Load application environment variables for both build-time (e.g. Next.js NEXT_PUBLIC_*)
+	// and runtime container environment.
+	var envVars map[string]string
+	envPath := filepath.Join("applications", app.ID, "env.json")
+	if err := p.store.ReadJSON(envPath, &envVars); err != nil || envVars == nil {
+		envVars = make(map[string]string)
+	}
+
 	if dep.RollbackTo == "" {
 		dep.Transition(StatusBuilding)
 		dep.Stage = "building"
@@ -167,11 +177,25 @@ func (p *Pipeline) Execute(ctx context.Context, dep *Deployment, progress io.Wri
 				dockerfile = "Dockerfile"
 			}
 
+			// For Next.js, Nuxt, Vite, React, etc., build-time env vars (e.g. NEXT_PUBLIC_API_URL=/api)
+			// must be present during `npm run build`. We inject both .env/.env.production and Docker BuildArgs.
+			if len(envVars) > 0 {
+				var envContent strings.Builder
+				for k, v := range envVars {
+					envContent.WriteString(fmt.Sprintf("%s=%s\n", k, v))
+				}
+				envBytes := []byte(envContent.String())
+				_ = os.WriteFile(filepath.Join(buildContextDir, ".env"), envBytes, 0600)
+				_ = os.WriteFile(filepath.Join(buildContextDir, ".env.production"), envBytes, 0600)
+				fmt.Fprintf(progress, "[liteploy] Injected %d build-time environment variables (.env / .env.production)\n", len(envVars))
+			}
+
 			fmt.Fprintf(progress, "[liteploy] Building Dockerfile: %s\n", dockerfile)
 			imgID, err := p.dockerCli.BuildImage(ctx, docker.BuildOptions{
 				ContextDir:     buildContextDir,
 				DockerfilePath: dockerfile,
 				Tags:           []string{imageName},
+				BuildArgs:      envVars,
 				NoCache:        false,
 			}, progress)
 			if err != nil {
@@ -224,15 +248,12 @@ func (p *Pipeline) Execute(ctx context.Context, dep *Deployment, progress io.Wri
 	labels := app.ManagedLabels()
 	labels["liteploy.deployment_id"] = dep.ID
 
-	// Read environment variables (encrypted at rest if configured)
+	// Create runtime environment variables list
 	var envList []string
-	envPath := filepath.Join("applications", app.ID, "env.json")
-	var envVars map[string]string
-	if err := p.store.ReadJSON(envPath, &envVars); err == nil {
-		for k, v := range envVars {
-			envList = append(envList, fmt.Sprintf("%s=%s", k, v))
-		}
+	for k, v := range envVars {
+		envList = append(envList, fmt.Sprintf("%s=%s", k, v))
 	}
+
 
 	var memMB int64
 	var cpus float64
@@ -294,24 +315,37 @@ func (p *Pipeline) Execute(ctx context.Context, dep *Deployment, progress io.Wri
 	dep.Stage = "routing"
 	fmt.Fprintf(progress, "[liteploy] Step 5/5: Configuring reverse proxy routes...\n")
 
-	if len(app.Domains) > 0 && app.Port > 0 {
+	if len(app.Domains) > 0 && app.Port > 0 && p.proxyMgr != nil {
 		// Caddy runs in liteploy-network and resolves the stable alias via Docker DNS.
 		// Format: liteploy-{appID}:{containerPort}
 		upstream := fmt.Sprintf("liteploy-%s:%d", app.ID, app.Port)
 		fmt.Fprintf(progress, "[liteploy] Routing %v -> %s (Docker DNS)\n", app.Domains, upstream)
-		if err := p.proxyMgr.UpsertRoute(ctx, &proxy.Route{
+		
+		newRoute := &proxy.Route{
 			AppID:    app.ID,
 			Domains:  app.Domains,
 			Upstream: upstream,
-		}); err != nil {
-			p.logger.Warn("pipeline: caddy route update warning", "app_id", app.ID, "error", err)
-			fmt.Fprintf(progress, "[liteploy] Warning: Caddy route update failed: %v\n", err)
-		} else {
-			fmt.Fprintf(progress, "[liteploy] Proxy routing active.\n")
 		}
-	} else {
-		fmt.Fprintf(progress, "[liteploy] No domains configured or port is 0, skipping proxy routing.\n")
+
+		if err := proxy.ValidateRoute(newRoute); err != nil {
+			fmt.Fprintf(progress, "[liteploy] Route validation error: %v. Aborting.\n", err)
+			_ = p.dockerCli.StopContainer(context.Background(), containerID, 5)
+			_ = p.dockerCli.RemoveContainer(context.Background(), containerID, true)
+			return fmt.Errorf("route validation failed: %w", err)
+		}
+
+		if err := p.proxyMgr.UpsertRoute(ctx, newRoute); err != nil {
+			p.logger.Error("pipeline: caddy route update error", "app_id", app.ID, "error", err)
+			fmt.Fprintf(progress, "[liteploy] Caddy routing failed: %v. Rolling back container.\n", err)
+			_ = p.dockerCli.StopContainer(context.Background(), containerID, 5)
+			_ = p.dockerCli.RemoveContainer(context.Background(), containerID, true)
+			return fmt.Errorf("caddy proxy configuration failed: %w", err)
+		}
+		fmt.Fprintf(progress, "[liteploy] Proxy routing active and verified.\n")
+	} else if len(app.Domains) == 0 {
+		fmt.Fprintf(progress, "[liteploy] No domains configured, skipping proxy routing.\n")
 	}
+
 
 	// -------------------------------------------------------------
 	// SUCCESS & Zero-downtime Old Container Cleanup
