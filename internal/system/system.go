@@ -11,10 +11,11 @@ import (
 
 // Version information, injected at build time via -ldflags.
 var (
-	Version   = "v1.0.0"
+	Version   = "v1.1.0"
 	CommitSHA = "unknown"
 	BuildDate = "unknown"
 )
+
 
 // NewLogger creates a structured slog logger configured for the given level and format.
 // json=true outputs JSON (for production log aggregators), json=false outputs human-readable text.

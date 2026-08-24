@@ -7,7 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v1.1.0] - 2026-08-24
+
+### Added
+- **One-Domain Multi-Path Routing:** Single-domain architecture (`qulineria.my.id` → frontend, `qulineria.my.id/api/*` → backend, `qulineria.my.id/assets/*` → backend static assets) without CORS or multiple SSL certificates.
+- **Strict Caddy JSON Route Ordering:** Generator automatically sorts specific path routes (`/api/*`, `/assets/*`) longest-first before catch-all routes (`/*`) in Caddy JSON configuration to eliminate 404 proxy leakage.
+- **Next.js / Frontend Build-Time Environment Injection:** Automatically writes `.env` / `.env.production` in build context and passes `BuildArgs` during `docker build` so `NEXT_PUBLIC_*` variables (e.g. `NEXT_PUBLIC_API_URL=/api`) are baked into compiled JavaScript bundles at build-time.
+- **Native Management CLI:** Headless commands `liteploy status [app]`, `liteploy deploy <app>`, `liteploy logs <app>`, `liteploy version`, and `liteploy help`.
+- **Zero-Downtime Deployment Guarantee:** Containers must pass health checks and proxy configuration must be verified before stopping previous containers.
+- **Route Validation & Safety:** Automatic duplicate `(host, path)` detection across different applications and enforcement of internal Docker DNS (`liteploy-app-xxx:PORT`), rejecting loopback addresses (`localhost`/`127.0.0.1`).
+- **Comprehensive Automated Test Suite:** 18 end-to-end and integration test scenarios in `tests/routing_e2e_test.go` covering real routing, Caddy Admin API inspection, and regression tests.
+- **Audited Production Installer:** Multi-stage health checks verifying systemd service, HTTP readiness (:8080/health), Caddy Admin API (:2019), and Docker network integrity before printing success.
+
+---
+
 ## [v1.0.0] - 2026-08-21
+
 
 ### Added
 - **Containerized Caddy Reverse Proxy:** Fully migrated Caddy from host systemd service to an isolated Docker container (`liteploy-caddy` on `liteploy-network`), completely eliminating 502 DNS resolution errors between host and internal container hostnames.

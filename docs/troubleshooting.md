@@ -65,3 +65,18 @@ This manual covers diagnostic steps for common operational issues.
      - If using Cloudflare proxy, go to **Cloudflare Dashboard** -> **SSL/TLS** -> set mode to **Full** (or **Full Strict**). Avoid *Flexible* as it can create protocol mismatches on port 80.
   4. **Application Container Starting / Unhealthy:**
      - Check if your backend/frontend container is running (`docker ps`) and inspect its logs on the dashboard.
+
+---
+
+## 6. Frontend Shows `net::ERR_CONNECTION_REFUSED` (Calls `localhost:8000`)
+
+- **Symptom:** Next.js or React frontend renders, but API requests fail with `ERR_CONNECTION_REFUSED` targeting `http://localhost:8000/api/...`.
+- **Cause:** Next.js baked `http://localhost:8000` into client-side JS bundles during build time because `NEXT_PUBLIC_API_URL` was not configured before `npm run build`.
+- **Solution:**
+  1. In the Frontend application settings, go to **🔐 Environment Variables**.
+  2. Add:
+     ```env
+     NEXT_PUBLIC_API_URL=/api
+     ```
+  3. Click **Save Environment Variables**.
+  4. Click **🚀 Deploy Now** to rebuild the Next.js Docker image with the build-time environment variable injected.
