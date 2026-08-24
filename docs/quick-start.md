@@ -55,8 +55,8 @@ The installer automatically configures dependencies, generates secure session se
 ## Step 4: Add Environment Variables & Volumes
 
 On the application detail page:
-1. **Environment Variables:** Scroll down to **🔐 Environment Variables (.env)** and add key-value pairs (e.g. `NODE_ENV=production`, `PORT=3000`).
-2. **Persistent Volumes (Optional):** If your app stores data or sqlite files, map a host directory (e.g. `/var/lib/myapp/data -> /app/data`).
+1. **Environment Variables:** Scroll down to **🔐 Environment Variables (.env)** and add key-value pairs (e.g. `PORT=3000`, `NODE_ENV=production`, or `NEXT_PUBLIC_API_URL=/api` for single-domain frontend apps). LITEPLOY automatically injects these into `.env.production` during the build step and passes them as runtime container variables.
+2. **Persistent Volumes (Optional):** If your app stores database files or uploads, map a host directory (e.g. `/var/lib/myapp/data -> /app/data`).
 
 ---
 
@@ -68,8 +68,10 @@ On the application detail page:
 
 ---
 
-## Step 6: Map Subdomain & Enjoy Instant HTTPS
+## Step 6: Map Domain, Subdomain, or Path Routing
 
-1. Under **🌐 DOMAINS & NETWORK**, add your desired subdomain (e.g. `app.example.com`).
-2. Because wildcard DNS (`*.example.com`) is already pointed to your VPS, the subdomain is live immediately!
-3. Caddy automatically provisions a TLS certificate and serves `https://app.example.com`.
+Under **🌐 DOMAINS & NETWORK**, add your desired routing target:
+- **Subdomain Routing:** Enter `app.example.com` (ready instantly with wildcard DNS).
+- **Same-Domain Path Routing:** For backend/API services, enter Domain: `example.com` and Path: `/api/*` (and `/assets/*`). For frontend services, enter Domain: `example.com` and Path: `/*`.
+- Caddy automatically manages routing order and provisions TLS certificates.
+
