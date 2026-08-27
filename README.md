@@ -5,7 +5,7 @@
 
 [![CI](https://github.com/nuexn0x-9/liteploy/actions/workflows/ci.yml/badge.svg)](https://github.com/nuexn0x-9/liteploy/actions)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/nuexn0x-9/liteploy)](https://github.com/nuexn0x-9/liteploy)
-[![License](https://img.shields.io/badge/license-Pending--Owner--Selection-blue.svg)](#license)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![RAM Idle](https://img.shields.io/badge/idle_RAM-~18.5_MB-success.svg)](#resource-philosophy)
 
 ---
@@ -209,5 +209,6 @@ We welcome open-source contributions! Please read [CONTRIBUTING.md](CONTRIBUTING
 ---
 
 ## 📄 License
+ 
+This project is licensed under the **MIT License** — free and open for personal, commercial, and educational use. See the [LICENSE](LICENSE) file for details.
 
-*(Project license selection is pending repository owner approval. See [LICENSE](LICENSE) for details once updated.)*
