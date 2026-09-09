@@ -10,6 +10,8 @@ package api
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"html/template"
 	"log/slog"
 	"net"
@@ -152,6 +154,7 @@ func (s *Server) buildRouter() http.Handler {
 	mux.HandleFunc("POST /applications/{id}/domains/delete", s.authenticated(s.handleApplicationDeleteDomain))
 	mux.HandleFunc("GET /applications/{id}/logs", s.authenticated(s.handleApplicationLogs))
 	mux.HandleFunc("GET /deployments", s.authenticated(s.handleDeploymentsList))
+	mux.HandleFunc("GET /logs", s.authenticated(s.handleUnifiedLogs))
 	mux.HandleFunc("GET /deployments/{id}", s.authenticated(s.handleDeploymentDetail))
 	mux.HandleFunc("GET /domains", s.authenticated(s.handleDomainsList))
 	mux.HandleFunc("GET /settings", s.authenticated(s.handleSettingsPage))
@@ -175,6 +178,7 @@ func (s *Server) buildRouter() http.Handler {
 	mux.HandleFunc("POST /api/applications/{id}/deploy", s.apiAuthenticated(s.handleAPIDeployApplication))
 	mux.HandleFunc("GET /api/applications/{id}/env", s.apiAuthenticated(s.handleAPIGetEnv))
 	mux.HandleFunc("POST /api/applications/{id}/env", s.apiAuthenticated(s.handleAPIUpdateEnv))
+	mux.HandleFunc("GET /api/system/stats", s.authenticated(s.handleAPISystemStats))
 	mux.HandleFunc("GET /api/deployments", s.apiAuthenticated(s.handleAPIListDeployments))
 	mux.HandleFunc("GET /api/deployments/{id}", s.apiAuthenticated(s.handleAPIGetDeployment))
 	mux.HandleFunc("GET /api/deployments/{id}/events", s.apiAuthenticated(s.handleDeploymentSSE))
@@ -193,6 +197,7 @@ func (s *Server) loadTemplates() (*template.Template, error) {
 	tmpl := template.New("").Funcs(templateFuncs())
 	_, err := tmpl.ParseFS(web.Assets,
 		"templates/layouts/*.html",
+		"templates/components/*.html",
 		"templates/pages/*.html",
 	)
 	if err != nil {
@@ -204,8 +209,67 @@ func (s *Server) loadTemplates() (*template.Template, error) {
 // templateFuncs returns the template function map.
 func templateFuncs() template.FuncMap {
 	return template.FuncMap{
+		"dict": func(values ...any) (map[string]any, error) {
+			if len(values)%2 != 0 {
+				return nil, fmt.Errorf("invalid dict call")
+			}
+			dict := make(map[string]any, len(values)/2)
+			for i := 0; i < len(values); i += 2 {
+				key, ok := values[i].(string)
+				if !ok {
+					return nil, fmt.Errorf("dict keys must be strings")
+				}
+				dict[key] = values[i+1]
+			}
+			return dict, nil
+		},
 		"formatTime": func(t time.Time) string {
 			return t.Format("2006-01-02 15:04:05")
+		},
+				"formatDurationShort": func(d float64) string {
+			if d <= 0 {
+				return "—"
+			}
+			dur := time.Duration(d * float64(time.Second))
+			m := int(dur.Minutes())
+			s := int(dur.Seconds()) % 60
+			if m > 0 {
+				return fmt.Sprintf("%dm %ds", m, s)
+			}
+			return fmt.Sprintf("%ds", s)
+		},
+		"formatDateTimeShort": func(t time.Time) string {
+			return t.Format("Jan 02, 15:04")
+		},
+		"countStopped": func(apps []*application.Application) int {
+			count := 0
+			for _, app := range apps {
+				if app.Status != application.StatusRunning {
+					count++
+				}
+			}
+			return count
+		},
+		"countCompleted": func(deps []*deployment.Deployment) int {
+			count := 0
+			for _, d := range deps {
+				if d.Status == deployment.StatusSuccess {
+					count++
+				}
+			}
+			return count
+		},
+		"countDeploying": func(deps []*deployment.Deployment) int {
+			count := 0
+			for _, d := range deps {
+				if d.Status.IsActive() {
+					count++
+				}
+			}
+			return count
+		},
+		"currentTimeFormatted": func() string {
+			return time.Now().Format("Jan 02, 2006  15:04")
 		},
 		"formatDuration": func(d float64) string {
 			dur := time.Duration(d * float64(time.Second))
@@ -254,4 +318,10 @@ func templateFuncs() template.FuncMap {
 			return system.Version
 		},
 	}
+}
+
+func (s *Server) handleAPISystemStats(w http.ResponseWriter, r *http.Request) {
+	stats := system.CollectSystemStats(r.Context(), s.cfg.DataDir)
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(stats)
 }

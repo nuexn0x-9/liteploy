@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -9,38 +9,30 @@
     <script src="/static/js/htmx-sse.js" defer></script>
     <script src="/static/js/app.js" defer></script>
 </head>
-<body class="app-layout">
-    <div class="mobile-topbar">
-        <a href="/" class="logo">LITEPLOY</a>
-        <button class="sidebar-toggle" onclick="document.querySelector('.sidebar').classList.toggle('open')" aria-label="Toggle navigation">☰</button>
-    </div>
-    <nav class="sidebar" role="navigation" aria-label="Main navigation">
-        <div class="sidebar-header">
-            <a href="/" class="logo">LITEPLOY<span class="logo-tagline">> DEPLOYMENT CONSOLE</span></a>
-            <div class="version-tag">{{appVersion}}</div>
-        </div>
-        <ul class="nav-links">
-            <li><a href="/" class="nav-link"><span class="nav-icon">◈</span> CONTROL ROOM</a></li>
-            <li><a href="/applications" class="nav-link"><span class="nav-icon">▣</span> APPLICATIONS</a></li>
-            <li><a href="/deployments" class="nav-link active"><span class="nav-icon">▲</span> DEPLOYMENTS</a></li>
-            <li><a href="/domains" class="nav-link"><span class="nav-icon">◉</span> NETWORK</a></li>
-            <li><a href="/settings" class="nav-link"><span class="nav-icon">✦</span> SYS CONFIG</a></li>
-        </ul>
-        <div class="sidebar-footer"></div>
-    </nav>
-    <main class="main-content" role="main">
-        <div class="page-header">
-            <div>
-                <div class="breadcrumb">
-                    <a href="/deployments">DEPLOYMENTS</a> / <a href="/applications/{{.Deployment.AppID}}">{{.Deployment.AppID}}</a>
+<body class="retro-window">
+    <!-- Top Bar -->
+    {{template "topbar" .}}
+
+    <div class="app-body">
+        <!-- Sidebar Navigation -->
+        {{template "sidebar" (dict "ActiveNav" "deployments" "Session" .Session)}}
+
+        <!-- Main Content -->
+        <main class="retro-content-canvas" role="main">
+            <div class="dashboard-top-banner">
+                <div class="dashboard-title-group">
+                    <div class="breadcrumb" style="margin-bottom: 0.25rem;">
+                        <a href="/deployments" style="color: var(--rp-subtle); text-decoration: none;">DEPLOYMENTS</a> / <a href="/applications/{{.Deployment.AppID}}" style="color: var(--rp-subtle); text-decoration: none;">{{.Deployment.AppID}}</a>
+                    </div>
+                    <div class="title-with-status" style="display: flex; align-items: center; gap: 0.75rem;">
+                        <h1 style="margin: 0;">BUILD #{{.Deployment.ID}}</h1>
+                        <span id="dep-status" class="status-badge status-{{.Deployment.Status}}">{{.Deployment.Status}}</span>
+                    </div>
                 </div>
-                <div class="title-with-status">
-                    <h1>BUILD #{{.Deployment.ID}}</h1>
-                    <span id="dep-status" class="status-badge status-{{.Deployment.Status}}">{{.Deployment.Status}}</span>
+                <div>
+                    <a href="/applications/{{.Deployment.AppID}}" class="retro-btn-secondary">← BACK TO APP</a>
                 </div>
             </div>
-            <a href="/applications/{{.Deployment.AppID}}" class="btn btn-secondary">← BACK TO APP</a>
-        </div>
 
         <!-- Deployment Details Card -->
         <div class="card" style="margin-bottom:1.25rem">
@@ -96,9 +88,10 @@
                 sse-swap="data"
                 hx-swap="beforeend"
                 {{end}}>
-                <pre id="log-output" class="log-output">{{/* existing logs loaded via JS */}}</pre>
+                <pre id="log-output" class="log-output">{{if .BuildLog}}{{.BuildLog}}{{else if .Deployment.Status.IsTerminal}}> NO BUILD LOG CAPTURED.{{end}}</pre>
             </div>
         </section>
     </main>
+    </div>
 </body>
 </html>

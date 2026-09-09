@@ -3,147 +3,236 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CONTROL ROOM � LITEPLOY</title>
+    <title>Dashboard — LITEPLOY</title>
     <link rel="stylesheet" href="/static/css/app.css">
     <script src="/static/js/htmx.min.js" defer></script>
     <script src="/static/js/app.js" defer></script>
 </head>
-<body class="app-layout">
-    <!-- Mobile Top Bar -->
-    <div class="mobile-topbar">
-        <a href="/" class="logo">LITEPLOY</a>
-        <button class="sidebar-toggle" onclick="document.querySelector('.sidebar').classList.toggle('open')" aria-label="Toggle navigation">?</button>
-    </div>
+<body class="retro-window">
+    <!-- Top Bar -->
+    {{template "topbar" .}}
 
-    <nav class="sidebar" role="navigation" aria-label="Main navigation">
-        <div class="sidebar-header">
-            <a href="/" class="logo">LITEPLOY
-                <span class="logo-tagline">> DEPLOYMENT CONSOLE</span>
-            </a>
-            <div class="version-tag">{{appVersion}}</div>
-        </div>
-        <ul class="nav-links">
-            <li><a href="/" class="nav-link active" aria-current="page"><span class="nav-icon">?</span> CONTROL ROOM</a></li>
-            <li><a href="/applications" class="nav-link"><span class="nav-icon">?</span> APPLICATIONS</a></li>
-            <li><a href="/deployments" class="nav-link"><span class="nav-icon">?</span> DEPLOYMENTS</a></li>
-            <li><a href="/domains" class="nav-link"><span class="nav-icon">?</span> NETWORK</a></li>
-            <li><a href="/settings" class="nav-link"><span class="nav-icon">?</span> SYS CONFIG</a></li>
-        </ul>
-        <div class="sidebar-footer">
-            {{if .Session}}
-            <span class="user-badge">{{.Session.Username}}</span>
-            <form method="POST" action="/logout">
-                <input type="hidden" name="_csrf" value="{{.Session.CSRFToken}}">
-                <button type="submit" class="btn-logout">[ LOGOUT ]</button>
-            </form>
-            {{end}}
-        </div>
-    </nav>
+    <div class="app-body">
+        <!-- Sidebar Navigation -->
+        {{template "sidebar" (dict "ActiveNav" "dashboard" "Session" .Session)}}
 
-    <main class="main-content" role="main">
-        <div class="page-header">
-            <div>
-                <h1>CONTROL ROOM</h1>
-                <p class="subtitle">System overview and workload status</p>
-            </div>
-            <a href="/applications/new" class="btn btn-primary">[ + NEW APPLICATION ]</a>
-        </div>
-
-        <!-- HUD Stats Row -->
-        <div class="stats-row">
-            <div class="stat-card">
-                <div class="stat-icon">▣</div>
-                <div>
-                    <div class="stat-value">{{len .Apps}}</div>
-                    <div class="stat-label">APPLICATIONS</div>
+        <!-- Main Dashboard Canvas -->
+        <main class="retro-content-canvas" role="main">
+            <!-- Header with Date/Time -->
+            <div class="dashboard-top-banner">
+                <div class="dashboard-title-group">
+                    <h1>Dashboard</h1>
+                    <p>Overview of your LITEPLOY server and applications.</p>
+                </div>
+                <div class="dashboard-datetime-badge">
+                    <span>📅</span>
+                    <span>{{currentTimeFormatted}}</span>
                 </div>
             </div>
-            <div class="stat-card">
-                <div class="stat-icon">●</div>
-                <div>
-                    <div class="stat-value" style="color: var(--rp-success)">{{countRunning .Apps}}</div>
-                    <div class="stat-label">ONLINE</div>
+
+            <!-- Top 4 Summary Cards -->
+            <div class="retro-metrics-grid">
+                <!-- 1. Applications -->
+                <a href="/applications" class="retro-metric-card active-card">
+                    <div class="metric-card-header">
+                        <div class="metric-icon-box purple">⊞</div>
+                        <span class="metric-card-label">APPLICATIONS</span>
+                        <span class="metric-card-chevron">&gt;</span>
+                    </div>
+                    <div class="metric-card-count">{{len .Apps}}</div>
+                    <div class="metric-card-subtext">{{countRunning .Apps}} running &bull; {{countStopped .Apps}} stopped</div>
+                </a>
+
+                <!-- 2. Deployments -->
+                <a href="/deployments" class="retro-metric-card">
+                    <div class="metric-card-header">
+                        <div class="metric-icon-box green">☁</div>
+                        <span class="metric-card-label">DEPLOYMENTS</span>
+                        <span class="metric-card-chevron">&gt;</span>
+                    </div>
+                    <div class="metric-card-count">{{len .Deployments}}</div>
+                    <div class="metric-card-subtext">{{countDeploying .Deployments}} running &bull; {{countCompleted .Deployments}} completed</div>
+                </a>
+
+                <!-- 3. Server / Active Workloads -->
+                <div class="retro-metric-card">
+                    <div class="metric-card-header">
+                        <div class="metric-icon-box cream">🖳</div>
+                        <span class="metric-card-label">SERVER</span>
+                        <span class="metric-card-chevron">&gt;</span>
+                    </div>
+                    <div class="metric-card-count">{{countRunning .Apps}}</div>
+                    <div class="metric-card-subtext">active application{{if ne (countRunning .Apps) 1}}s{{end}}</div>
                 </div>
+
+                <!-- 4. Domains -->
+                <a href="/domains" class="retro-metric-card">
+                    <div class="metric-card-header">
+                        <div class="metric-icon-box shield">🌐</div>
+                        <span class="metric-card-label">DOMAINS</span>
+                        <span class="metric-card-chevron">&gt;</span>
+                    </div>
+                    <div class="metric-card-count">{{if .Settings.PrimaryDomain}}1{{else}}0{{end}}</div>
+                    <div class="metric-card-subtext">{{if .Settings.HTTPSEnabled}}1 with HTTPS{{else}}0 with HTTPS{{end}}</div>
+                </a>
             </div>
-            <div class="stat-card">
-                <div class="stat-icon">⚡</div>
-                <div>
-                    <div class="stat-value" style="font-size: 0.65rem">&lt; 50 MB</div>
-                    <div class="stat-label">ENGINE RAM</div>
-                </div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-icon">🌐</div>
-                <div>
-                    {{if .Settings.PrimaryDomain}}
-                    <div class="stat-value" style="font-size: 0.42rem; color: var(--rp-primary);">{{.Settings.PrimaryDomain}}</div>
-                    <div class="stat-label">{{if .Settings.HTTPSEnabled}}HTTPS ACTIVE{{else}}DNS CONFIGURED{{end}}</div>
+
+            <!-- 2-Column Split: Recent Deployments (Left) & Server Resources + Quick Actions (Right) -->
+            <div class="dashboard-columns-split">
+                <!-- Left: Recent Deployments -->
+                <div class="retro-panel">
+                    <div class="retro-panel-header">
+                        <div class="retro-panel-title">
+                            <span>▤</span>
+                            <span>Recent Deployments</span>
+                        </div>
+                        <a href="/deployments" class="retro-panel-header-link">View all &rarr;</a>
+                    </div>
+
+                    {{if .Deployments}}
+                    <table class="retro-table">
+                        <thead>
+                            <tr>
+                                <th>APPLICATION</th>
+                                <th>STATUS</th>
+                                <th>BRANCH</th>
+                                <th>DURATION</th>
+                                <th>TIME</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {{range .Deployments}}
+                            {{$app := index $.AppMap .AppID}}
+                            <tr>
+                                <td>
+                                    <div class="app-identity-cell">
+                                        <div class="app-cube-icon p1">⬡</div>
+                                        <span>{{if $app}}{{$app.Name}}{{else}}{{.AppID}}{{end}}</span>
+                                    </div>
+                                </td>
+                                <td>
+                                    {{if eq .Status "success"}}
+                                    <span class="pill-badge success"><span class="dot"></span> SUCCESS</span>
+                                    {{else if or (eq .Status "deploying") (eq .Status "building") (eq .Status "preparing") (eq .Status "starting")}}
+                                    <span class="pill-badge deploying"><span class="dot"></span> DEPLOYING</span>
+                                    {{else if eq .Status "failed"}}
+                                    <span class="pill-badge failed"><span class="dot"></span> FAILED</span>
+                                    {{else}}
+                                    <span class="pill-badge stopped"><span class="dot"></span> {{.Status}}</span>
+                                    {{end}}
+                                </td>
+                                <td>
+                                    {{if and $app $app.Source.GitBranch}}
+                                    <code>{{$app.Source.GitBranch}}</code>
+                                    {{else}}
+                                    <code>main</code>
+                                    {{end}}
+                                </td>
+                                <td>{{formatDurationShort .Duration}}</td>
+                                <td>{{formatDateTimeShort .CreatedAt}}</td>
+                                <td style="text-align:right;">
+                                    <a href="/deployments/{{.ID}}" style="color:var(--color-ink); text-decoration:none; font-weight:bold;">&gt;</a>
+                                </td>
+                            </tr>
+                            {{end}}
+                        </tbody>
+                    </table>
                     {{else}}
-                    <div class="stat-value" style="font-size: 0.42rem;"><a href="/setup/domain" style="color: var(--rp-primary);">[ SETUP ]</a></div>
-                    <div class="stat-label">PRIMARY DOMAIN</div>
+                    <div style="padding: 2.5rem; text-align: center; color: var(--color-text-muted);">
+                        <div style="font-size: 1.8rem; margin-bottom: 0.5rem;">☁</div>
+                        <p style="font-family: var(--font-mono); font-size: 0.85rem;">No recent deployment records found.</p>
+                    </div>
                     {{end}}
                 </div>
-            </div>
-        </div>
 
-        <!-- Applications -->
-        <div class="section">
-            <div class="section-header">
-                <h2>MANAGED WORKLOADS</h2>
-                <a href="/applications" class="btn btn-sm btn-secondary">VIEW ALL ?</a>
-            </div>
-
-            {{if .Apps}}
-            <div class="app-grid">
-                {{range .Apps}}
-                <div class="app-card">
-                    <div class="app-card-top">
-                        <div>
-                            <a href="/applications/{{.ID}}" class="app-title-link">{{.Name}}</a>
-                            <div class="text-xs text-muted" style="margin-top:0.2rem; font-family: var(--font-mono)">ID: {{.ID}}</div>
+                <!-- Right: Server Resources & Quick Actions -->
+                <div class="dashboard-side-column">
+                    <!-- Server Resources Panel -->
+                    <div class="retro-panel">
+                        <div class="retro-panel-header">
+                            <div class="retro-panel-title">
+                                <span>📊</span>
+                                <span>Server Resources</span>
+                            </div>
                         </div>
-                        <span class="status-badge status-{{.Status}}">{{.Status}}</span>
+                        <div style="padding: 1.25rem;">
+                            <!-- Memory -->
+                            <div class="resource-row">
+                                <div class="resource-header">
+                                    <span>Memory Usage</span>
+                                    <span class="resource-stats">{{.Stats.MemoryUsedMB}} MB / {{.Stats.MemoryTotalMB}} MB &nbsp;{{.Stats.MemoryPercent}}%</span>
+                                </div>
+                                <div class="progress-track">
+                                    <div class="progress-bar-fill green" style="width: {{.Stats.MemoryPercent}}%;"></div>
+                                </div>
+                            </div>
+
+                            <!-- CPU -->
+                            <div class="resource-row">
+                                <div class="resource-header">
+                                    <span>CPU Usage</span>
+                                    <span class="resource-stats">{{.Stats.CPUPercent}}%</span>
+                                </div>
+                                <div class="progress-track">
+                                    <div class="progress-bar-fill purple" style="width: {{.Stats.CPUPercent}}%;"></div>
+                                </div>
+                            </div>
+
+                            <!-- Disk -->
+                            <div class="resource-row">
+                                <div class="resource-header">
+                                    <span>Disk Usage</span>
+                                    <span class="resource-stats">{{printf "%.1f" .Stats.DiskUsedGB}} GB / {{printf "%.0f" .Stats.DiskTotalGB}} GB &nbsp;{{.Stats.DiskPercent}}%</span>
+                                </div>
+                                <div class="progress-track">
+                                    <div class="progress-bar-fill green" style="width: {{.Stats.DiskPercent}}%;"></div>
+                                </div>
+                            </div>
+
+                            <!-- Docker Containers -->
+                            <div class="resource-row">
+                                <div class="resource-header">
+                                    <span>Docker Containers</span>
+                                    <span class="resource-stats">{{.Stats.ContainersRunning}} / {{if .Stats.ContainersTotal}}{{.Stats.ContainersTotal}}{{else}}20{{end}}</span>
+                                </div>
+                                <div class="progress-track">
+                                    <div class="progress-bar-fill purple" style="width: {{if .Stats.ContainersPercent}}{{.Stats.ContainersPercent}}{{else}}0{{end}}%;"></div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
-                    <div class="app-card-body">
-                        <div class="app-info-row">
-                            <span class="text-muted">SOURCE</span>
-                            <span class="badge-neutral">{{.Source.Type}}</span>
+                    <!-- Quick Actions Panel -->
+                    <div class="retro-panel">
+                        <div class="retro-panel-header">
+                            <div class="retro-panel-title">
+                                <span>⚡</span>
+                                <span>Quick Actions</span>
+                            </div>
                         </div>
-                        <div class="app-info-row">
-                            <span class="text-muted">PORT</span>
-                            <code>:{{.Port}}</code>
-                        </div>
-                        {{if .Domains}}
-                        <div class="app-info-row">
-                            <span class="text-muted">DOMAIN</span>
-                            <a href="http://{{index .Domains 0}}" target="_blank" rel="noopener noreferrer" class="domain-link">{{index .Domains 0}}</a>
-                        </div>
-                        {{end}}
-                    </div>
-
-                    <div class="app-card-actions">
-                        <a href="/applications/{{.ID}}" class="btn btn-sm btn-secondary">MANAGE</a>
-                        <div class="actions">
-                            <a href="/applications/{{.ID}}/logs" class="btn btn-sm btn-icon" title="Runtime Logs">LOG</a>
-                            <form method="POST" action="/applications/{{.ID}}/deploy" style="display:inline">
-                                <input type="hidden" name="_csrf" value="{{if $.Session}}{{$.Session.CSRFToken}}{{end}}">
-                                <button type="submit" class="btn btn-sm btn-primary">DEPLOY</button>
-                            </form>
+                        <div class="quick-actions-grid">
+                            <a href="/applications/new" class="quick-action-btn primary">
+                                <span>+</span>
+                                <span>Create Application</span>
+                            </a>
+                            <a href="/applications/new?source=git" class="quick-action-btn secondary">
+                                <span>☁</span>
+                                <span>Deploy from Git</span>
+                            </a>
+                            <a href="/applications/new?source=image" class="quick-action-btn secondary">
+                                <span>⬡</span>
+                                <span>Deploy Image</span>
+                            </a>
+                            <a href="/setup/domain" class="quick-action-btn secondary">
+                                <span>🔗</span>
+                                <span>Configure Domain</span>
+                            </a>
                         </div>
                     </div>
                 </div>
-                {{end}}
             </div>
-            {{else}}
-            <div class="empty-state">
-                <span class="empty-icon">?</span>
-                <h3>NO WORKLOADS INITIALIZED</h3>
-                <p>Deploy your first Docker workload, Git repository, or web service.</p>
-                <a href="/applications/new" class="btn btn-primary">[ + CREATE FIRST APPLICATION ]</a>
-            </div>
-            {{end}}
-        </div>
-    </main>
+        </main>
+    </div>
 </body>
 </html>

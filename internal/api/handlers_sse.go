@@ -98,51 +98,13 @@ func (s *Server) streamLogSSE(w io.Writer, flusher http.Flusher, deploymentID st
 
 // streamLogSSEFrom streams log lines starting from offset, returns new offset.
 func (s *Server) streamLogSSEFrom(w io.Writer, flusher http.Flusher, deploymentID string, offset int64) (int64, error) {
-	dep, err := s.depSvc.Get(deploymentID)
-	if err != nil {
-		return offset, err
-	}
-	_ = dep
-
-	// Use a pipe writer to capture log lines and send as SSE events.
-	pr, pw := io.Pipe()
-	go func() {
-		err := s.depSvc.StreamBuildLog(deploymentID, pw)
-		pw.CloseWithError(err)
-	}()
-	defer pr.Close()
-
-	buf := make([]byte, 4096)
-	newOffset := offset
-
-	// Skip to offset.
-	skipped := int64(0)
-	for skipped < offset {
-		toSkip := int64(len(buf))
-		if toSkip > offset-skipped {
-			toSkip = offset - skipped
-		}
-		n, err := pr.Read(buf[:toSkip])
-		skipped += int64(n)
-		if err != nil {
-			break
-		}
+	chunk, newOffset, err := s.depSvc.ReadBuildLogChunk(deploymentID, offset)
+	if err != nil || len(chunk) == 0 {
+		return newOffset, err
 	}
 
-	// Stream remaining lines.
-	for {
-		n, err := pr.Read(buf)
-		if n > 0 {
-			line := string(buf[:n])
-			fmt.Fprintf(w, "data: %s\n\n", line)
-			newOffset += int64(n)
-			flusher.Flush()
-		}
-		if err != nil {
-			break
-		}
-	}
-
+	fmt.Fprintf(w, "data: %s\n\n", string(chunk))
+	flusher.Flush()
 	return newOffset, nil
 }
 

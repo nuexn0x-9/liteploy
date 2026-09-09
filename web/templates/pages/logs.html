@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Logs — LITEPLOY</title>
+    <link rel="stylesheet" href="/static/css/app.css">
+    <script src="/static/js/htmx.min.js" defer></script>
+    <script src="/static/js/htmx-sse.js" defer></script>
+    <script src="/static/js/app.js" defer></script>
+</head>
+<body class="retro-window">
+    <!-- Top Bar -->
+    {{template "topbar" .}}
+
+    <div class="app-body">
+        <!-- Sidebar Navigation -->
+        {{template "sidebar" (dict "ActiveNav" "logs" "Session" .Session)}}
+
+        <!-- Main Content -->
+        <main class="retro-content-canvas" role="main">
+            <div class="dashboard-top-banner">
+                <div class="dashboard-title-group">
+                    <h1>System &amp; Workload Logs</h1>
+                    <p>Live stream aggregated runtime output across your workloads.</p>
+                </div>
+            </div>
+
+            <!-- App Selector Strip -->
+            <div class="card" style="padding: 1rem 1.25rem; margin-bottom: 1.25rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem;">
+                <div style="display: flex; align-items: center; gap: 0.75rem;">
+                    <span style="font-family: var(--font-display); font-weight: 700; font-size: 0.82rem;">SELECT WORKLOAD:</span>
+                    <form method="GET" action="/logs" style="display: inline-block;">
+                        <select name="app_id" onchange="this.form.submit()" style="padding: 0.4rem 2rem 0.4rem 0.75rem; font-family: var(--font-mono); font-size: 0.85rem; border: 2px solid var(--color-border); border-radius: 3px; background: var(--color-surface);">
+                            {{if not .Apps}}
+                            <option value="">No applications found</option>
+                            {{else}}
+                            {{range .Apps}}
+                            <option value="{{.ID}}" {{if and $.SelectedApp (eq $.SelectedApp.ID .ID)}}selected{{end}}>
+                                {{.Name}} ({{.ID}}) - {{.Status}}
+                            </option>
+                            {{end}}
+                            {{end}}
+                        </select>
+                    </form>
+                </div>
+
+                {{if .SelectedApp}}
+                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                    <span class="status-badge status-{{.SelectedApp.Status}}">{{.SelectedApp.Status}}</span>
+                    <a href="/applications/{{.SelectedApp.ID}}" class="btn btn-sm btn-secondary">MANAGE APP &rarr;</a>
+                </div>
+                {{end}}
+            </div>
+
+            <!-- Terminal Log Viewer -->
+            <section class="card" style="padding: 0; overflow: hidden;">
+                <div class="retro-panel-header">
+                    <div class="retro-panel-title">
+                        <span>📄</span>
+                        <span>{{if .SelectedApp}}{{.SelectedApp.Name}} // RUNTIME LOGS{{else}}SYSTEM OUTPUT{{end}}</span>
+                    </div>
+                    <label class="autoscroll-label" style="font-family: var(--font-mono); font-size: 0.75rem; cursor: pointer; display: flex; align-items: center; gap: 0.4rem;">
+                        <input type="checkbox" id="autoscroll" checked> AUTO-SCROLL
+                    </label>
+                </div>
+                <div id="log-container" class="log-container"
+                    {{if and .SelectedApp .SelectedApp.ContainerID}}
+                    hx-ext="sse"
+                    sse-connect="/api/applications/{{.SelectedApp.ID}}/logs/stream"
+                    sse-swap="data"
+                    hx-swap="beforeend"
+                    {{end}}
+                    style="min-height: 480px; max-height: 65vh; background: #141720; color: #A3E635; padding: 1.25rem; font-family: var(--font-mono); font-size: 0.82rem; overflow-y: auto; line-height: 1.5;">
+                    <pre id="log-output" class="log-output" style="margin: 0; background: transparent; color: inherit; border: none; padding: 0;">{{if not .SelectedApp}}> NO WORKLOAD SELECTED.
+> CREATE OR SELECT AN APPLICATION TO VIEW ITS LOGS.{{else if not .SelectedApp.ContainerID}}> APPLICATION {{.SelectedApp.Name}} ({{.SelectedApp.ID}}) HAS NO ACTIVE RUNNING CONTAINER.
+> DEPLOY THE APPLICATION FIRST TO STREAM RUNTIME LOGS.{{else}}> CONNECTED TO CONTAINER STREAM ({{.SelectedApp.ContainerID}})
+> STREAMING STDOUT / STDERR...{{end}}</pre>
+                </div>
+            </section>
+        </main>
+    </div>
+</body>
+</html>

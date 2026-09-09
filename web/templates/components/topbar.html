@@ -1,0 +1,30 @@
+{{define "topbar"}}
+<header class="topbar">
+    <div class="topbar-left">
+        <div class="topbar-logo-cube">⬡</div>
+        <div class="topbar-brand">
+            <span class="topbar-title">LITEPLOY</span>
+            <span class="topbar-subtitle">Lightweight Deployment Platform</span>
+        </div>
+    </div>
+    <div class="topbar-right">
+        <div class="server-ip-badge" title="Host Server IP">
+            <span>🖳</span>
+            <span>{{if .ServerIP}}{{.ServerIP}}{{else}}127.0.0.1{{end}}</span>
+        </div>
+        <div class="topbar-divider"></div>
+        {{if .Session}}
+        <div class="user-profile-pill" onclick="document.getElementById('topbar-logout-form').submit()">
+            <span>👤</span>
+            <span>{{.Session.Username}}</span>
+            <span style="font-size:0.7rem">▾</span>
+            <form id="topbar-logout-form" method="POST" action="/logout" style="display:none">
+                <input type="hidden" name="_csrf" value="{{.Session.CSRFToken}}">
+            </form>
+        </div>
+        {{else}}
+        <a href="/login" class="btn btn-sm btn-secondary">LOGIN</a>
+        {{end}}
+    </div>
+</header>
+{{end}}

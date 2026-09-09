@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -9,58 +9,51 @@
     <script src="/static/js/htmx-sse.js" defer></script>
     <script src="/static/js/app.js" defer></script>
 </head>
-<body class="app-layout">
-    <div class="mobile-topbar">
-        <a href="/" class="logo">LITEPLOY</a>
-        <button class="sidebar-toggle" onclick="document.querySelector('.sidebar').classList.toggle('open')" aria-label="Toggle navigation">☰</button>
-    </div>
-    <nav class="sidebar" role="navigation" aria-label="Main navigation">
-        <div class="sidebar-header">
-            <a href="/" class="logo">LITEPLOY<span class="logo-tagline">> DEPLOYMENT CONSOLE</span></a>
-            <div class="version-tag">{{appVersion}}</div>
-        </div>
-        <ul class="nav-links">
-            <li><a href="/" class="nav-link"><span class="nav-icon">◈</span> CONTROL ROOM</a></li>
-            <li><a href="/applications" class="nav-link active"><span class="nav-icon">▣</span> APPLICATIONS</a></li>
-            <li><a href="/deployments" class="nav-link"><span class="nav-icon">▲</span> DEPLOYMENTS</a></li>
-            <li><a href="/domains" class="nav-link"><span class="nav-icon">◉</span> NETWORK</a></li>
-            <li><a href="/settings" class="nav-link"><span class="nav-icon">✦</span> SYS CONFIG</a></li>
-        </ul>
-        <div class="sidebar-footer"></div>
-    </nav>
-    <main class="main-content" role="main">
-        <div class="page-header">
-            <div>
-                <div class="breadcrumb">
-                    <a href="/applications">APPLICATIONS</a> / <a href="/applications/{{.App.ID}}">{{.App.Name}}</a> / LOG
-                </div>
-                <div class="title-with-status">
-                    <h1>SYSTEM LOG</h1>
-                    <span class="status-badge status-{{.App.Status}}">{{.App.Status}}</span>
-                </div>
-                <p class="subtitle" style="margin-top:0.2rem">Container runtime stdout/stderr — {{.App.Name}}</p>
-            </div>
-            <a href="/applications/{{.App.ID}}" class="btn btn-secondary">← BACK TO APP</a>
-        </div>
+<body class="retro-window">
+    <!-- Top Bar -->
+    {{template "topbar" .}}
 
-        <section class="card">
-            <div class="log-header">
-                <span class="log-title">CONTAINER OUTPUT // STDOUT + STDERR</span>
-                <label class="autoscroll-label">
-                    <input type="checkbox" id="autoscroll" checked> AUTO-SCROLL
-                </label>
+    <div class="app-body">
+        <!-- Sidebar Navigation -->
+        {{template "sidebar" (dict "ActiveNav" "applications" "Session" .Session)}}
+
+        <!-- Main Content -->
+        <main class="retro-content-canvas" role="main">
+            <div class="dashboard-top-banner">
+                <div class="dashboard-title-group">
+                    <div class="breadcrumb" style="margin-bottom: 0.25rem;">
+                        <a href="/applications" style="color: var(--rp-subtle); text-decoration: none;">APPLICATIONS</a> / <a href="/applications/{{.App.ID}}" style="color: var(--rp-subtle); text-decoration: none;">{{.App.Name}}</a> / LOG
+                    </div>
+                    <div class="title-with-status" style="display: flex; align-items: center; gap: 0.75rem;">
+                        <h1 style="margin: 0;">Runtime Logs</h1>
+                        <span class="status-badge status-{{.App.Status}}">{{.App.Status}}</span>
+                    </div>
+                    <p style="margin-top:0.2rem; font-size: 0.82rem; color: var(--rp-subtle);">Container runtime stdout/stderr — {{.App.Name}} ({{.App.ID}})</p>
+                </div>
+                <div>
+                    <a href="/applications/{{.App.ID}}" class="retro-btn-secondary">← BACK TO APP</a>
+                </div>
             </div>
-            <div id="log-container" class="log-container"
-                {{if .App.ContainerID}}
-                hx-ext="sse"
-                sse-connect="/api/applications/{{.App.ID}}/logs/stream"
-                sse-swap="data"
-                hx-swap="beforeend"
-                {{end}}>
-                <pre id="log-output" class="log-output">{{if not .App.ContainerID}}> NO CONTAINER RUNNING FOR THIS APPLICATION.
+
+            <section class="card" style="margin-top: 1rem;">
+                <div class="log-header">
+                    <span class="log-title">CONTAINER OUTPUT // STDOUT + STDERR</span>
+                    <label class="autoscroll-label">
+                        <input type="checkbox" id="autoscroll" checked> AUTO-SCROLL
+                    </label>
+                </div>
+                <div id="log-container" class="log-container"
+                    {{if .App.ContainerID}}
+                    hx-ext="sse"
+                    sse-connect="/api/applications/{{.App.ID}}/logs/stream"
+                    sse-swap="data"
+                    hx-swap="beforeend"
+                    {{end}}>
+                    <pre id="log-output" class="log-output">{{if not .App.ContainerID}}> NO CONTAINER RUNNING FOR THIS APPLICATION.
 > DEPLOY THE APPLICATION FIRST TO VIEW RUNTIME LOGS.{{end}}</pre>
-            </div>
-        </section>
-    </main>
+                </div>
+            </section>
+        </main>
+    </div>
 </body>
 </html>

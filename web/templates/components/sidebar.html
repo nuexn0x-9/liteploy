@@ -1,0 +1,81 @@
+{{define "sidebar"}}
+<aside class="retro-sidebar" role="navigation" aria-label="Main Navigation">
+    <ul class="sidebar-nav-list">
+        <li>
+            <a href="/" class="sidebar-nav-item {{if eq .ActiveNav "dashboard"}}active{{end}}">
+                <span class="nav-icon">⌂</span>
+                <span>Dashboard</span>
+            </a>
+        </li>
+        <li>
+            <a href="/applications" class="sidebar-nav-item {{if eq .ActiveNav "applications"}}active{{end}}">
+                <span class="nav-icon">⊞</span>
+                <span>Applications</span>
+            </a>
+        </li>
+        <li>
+            <a href="/deployments" class="sidebar-nav-item {{if eq .ActiveNav "deployments"}}active{{end}}">
+                <span class="nav-icon">☁</span>
+                <span>Deployments</span>
+            </a>
+        </li>
+        <li>
+            <a href="/domains" class="sidebar-nav-item {{if eq .ActiveNav "domains"}}active{{end}}">
+                <span class="nav-icon">🌐</span>
+                <span>Domains</span>
+            </a>
+        </li>
+        <li>
+            <a href="/logs" class="sidebar-nav-item {{if eq .ActiveNav "logs"}}active{{end}}">
+                <span class="nav-icon">📄</span>
+                <span>Logs</span>
+            </a>
+        </li>
+        <li>
+            <a href="/settings" class="sidebar-nav-item {{if eq .ActiveNav "settings"}}active{{end}}">
+                <span class="nav-icon">⚙</span>
+                <span>Settings</span>
+            </a>
+        </li>
+    </ul>
+
+    <div class="sidebar-bottom-widgets">
+        <!-- System Health Widget -->
+        <div class="system-status-card">
+            <div class="system-status-header">
+                <span class="system-status-dot"></span>
+                <span>System Online</span>
+            </div>
+            <div class="system-status-details">
+                <div class="system-status-line">
+                    <span>Docker:</span>
+                    <strong class="text-success">Healthy</strong>
+                </div>
+                <div class="system-status-line">
+                    <span>Caddy:</span>
+                    <strong class="text-success">Healthy</strong>
+                </div>
+            </div>
+        </div>
+
+        <!-- Pixel Mountain Art -->
+        <div class="pixel-mountain-container">
+            <svg class="pixel-mountain-svg" viewBox="0 0 160 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <!-- Background sky mountains -->
+                <polygon points="10,60 45,20 60,35 85,10 110,35 125,25 155,60" fill="#8FA4C7" />
+                <!-- Foreground darker mountains -->
+                <polygon points="0,60 30,30 45,45 65,22 80,38 95,25 130,60" fill="#6256CA" />
+                <!-- Snow peaks -->
+                <polygon points="45,20 40,26 50,26" fill="#FAFAD9" />
+                <polygon points="85,10 78,18 92,18" fill="#FAFAD9" />
+                <polygon points="65,22 60,28 70,28" fill="#FAFAD9" />
+                <polygon points="95,25 90,31 100,31" fill="#FAFAD9" />
+            </svg>
+            <div class="pixel-tagline">
+                Small Server.<br>
+                Big Possibilities.
+            </div>
+        </div>
+    </div>
+</aside>
+{{end}}

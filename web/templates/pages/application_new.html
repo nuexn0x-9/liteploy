@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -8,41 +8,25 @@
     <script src="/static/js/htmx.min.js" defer></script>
     <script src="/static/js/app.js" defer></script>
 </head>
-<body class="app-layout">
-    <div class="mobile-topbar">
-        <a href="/" class="logo">LITEPLOY</a>
-        <button class="sidebar-toggle" onclick="document.querySelector('.sidebar').classList.toggle('open')" aria-label="Toggle navigation">☰</button>
-    </div>
-    <nav class="sidebar" role="navigation" aria-label="Main navigation">
-        <div class="sidebar-header">
-            <a href="/" class="logo">LITEPLOY<span class="logo-tagline">> DEPLOYMENT CONSOLE</span></a>
-            <div class="version-tag">{{appVersion}}</div>
-        </div>
-        <ul class="nav-links">
-            <li><a href="/" class="nav-link"><span class="nav-icon">◈</span> CONTROL ROOM</a></li>
-            <li><a href="/applications" class="nav-link active"><span class="nav-icon">▣</span> APPLICATIONS</a></li>
-            <li><a href="/deployments" class="nav-link"><span class="nav-icon">▲</span> DEPLOYMENTS</a></li>
-            <li><a href="/domains" class="nav-link"><span class="nav-icon">◉</span> NETWORK</a></li>
-            <li><a href="/settings" class="nav-link"><span class="nav-icon">✦</span> SYS CONFIG</a></li>
-        </ul>
-        <div class="sidebar-footer">
-            {{if .Session}}
-            <span class="user-badge">{{.Session.Username}}</span>
-            <form method="POST" action="/logout">
-                <input type="hidden" name="_csrf" value="{{.Session.CSRFToken}}">
-                <button type="submit" class="btn-logout">[ LOGOUT ]</button>
-            </form>
-            {{end}}
-        </div>
-    </nav>
-    <main class="main-content" role="main">
-        <div class="page-header">
-            <div>
-                <h1>NEW APPLICATION</h1>
-                <p class="subtitle">Initialize a new workload from Git or Docker Registry</p>
+<body class="retro-window">
+    <!-- Top Bar -->
+    {{template "topbar" .}}
+
+    <div class="app-body">
+        <!-- Sidebar Navigation -->
+        {{template "sidebar" (dict "ActiveNav" "applications" "Session" .Session)}}
+
+        <!-- Main Content -->
+        <main class="retro-content-canvas" role="main">
+            <div class="dashboard-top-banner">
+                <div class="dashboard-title-group">
+                    <h1>Create New Application</h1>
+                    <p>Initialize a new microservice, monorepo component, or container workload.</p>
+                </div>
+                <div>
+                    <a href="/applications" class="retro-btn-secondary">← BACK TO LIST</a>
+                </div>
             </div>
-            <a href="/applications" class="btn btn-secondary">← BACK</a>
-        </div>
 
         {{if .Error}}
         <div class="alert alert-error">SYSTEM ERROR — {{.Error}}</div>
@@ -87,6 +71,31 @@
                         <label for="dockerfile_path">DOCKERFILE PATH</label>
                         <input type="text" id="dockerfile_path" name="dockerfile_path" placeholder="Dockerfile" value="Dockerfile">
                     </div>
+                </div>
+
+                <!-- Monorepo Options (Optional) -->
+                <div class="form-row">
+                    <div class="form-group flex-1">
+                        <label for="service_path">MONOREPO SERVICE PATH (OPTIONAL)</label>
+                        <input type="text" id="service_path" name="service_path" placeholder="e.g. backend or services/api">
+                        <small>Subdirectory containing this service's source code.</small>
+                    </div>
+                    <div class="form-group flex-1">
+                        <label for="build_context">BUILD CONTEXT (OPTIONAL)</label>
+                        <input type="text" id="build_context" name="build_context" placeholder="e.g. . or services/api">
+                        <small>Root directory for Docker build context.</small>
+                    </div>
+                </div>
+
+                <!-- Service Classification -->
+                <div class="form-group">
+                    <label for="service_type">SERVICE TYPE</label>
+                    <select id="service_type" name="service_type">
+                        <option value="web">PUBLIC WEB SERVICE (HTTPS + Domain)</option>
+                        <option value="api">API SERVICE (Public or Cluster)</option>
+                        <option value="internal">INTERNAL MICROSERVICE (Internal DNS Only, No Public Port)</option>
+                        <option value="worker">BACKGROUND WORKER (No Inbound Ports)</option>
+                    </select>
                 </div>
 
                 <!-- Git Auth Method -->
@@ -188,7 +197,20 @@
                 btn.textContent = 'SHOW';
             }
         }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            const params = new URLSearchParams(window.location.search);
+            const src = params.get('source');
+            if (src) {
+                const sel = document.getElementById('source_type');
+                if (sel) {
+                    sel.value = src;
+                    showSourceFields(src);
+                }
+            }
+        });
         </script>
     </main>
+    </div>
 </body>
 </html>

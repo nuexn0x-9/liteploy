@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/liteploy/liteploy/internal/application"
+	"github.com/liteploy/liteploy/internal/docker"
 	"github.com/liteploy/liteploy/internal/storage"
 	"github.com/liteploy/liteploy/internal/system"
 )
@@ -24,10 +25,63 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	}
 
 	apps := s.appSvc.List()
+	deps := s.depSvc.ListAll()
+	if len(deps) > 10 {
+		deps = deps[:10]
+	}
+
+	appMap := make(map[string]*application.Application, len(apps))
+	for _, a := range apps {
+		appMap[a.ID] = a
+	}
+
+	// System resources & health
+	stats := system.CollectSystemStats(r.Context(), s.cfg.DataDir)
+	if s.dockerCli != nil {
+		if err := s.dockerCli.Ping(r.Context()); err != nil {
+			stats.DockerHealthy = false
+		} else {
+			stats.DockerHealthy = true
+		}
+		if containers, err := s.dockerCli.ListContainers(r.Context(), docker.ListContainersOptions{All: true}); err == nil {
+			stats.ContainersTotal = len(containers)
+			running := 0
+			for _, c := range containers {
+				if strings.Contains(strings.ToLower(c.Status), "up") {
+					running++
+				}
+			}
+			stats.ContainersRunning = running
+			if stats.ContainersTotal > 0 {
+				stats.ContainersPercent = int((running * 100) / stats.ContainersTotal)
+			}
+		}
+	}
+
+	projects, _ := s.appSvc.ListProjects()
+
+	// Server IP
+	settings := s.settingsSvc.Get()
+	serverIP := settings.ServerIP
+	if serverIP == "" {
+		serverIP = system.GetServerPublicIP(r.Context())
+		if serverIP == "" {
+			serverIP = r.Host
+			if strings.Contains(serverIP, ":") {
+				serverIP = strings.Split(serverIP, ":")[0]
+			}
+		}
+	}
+
 	s.renderPage(w, r, "dashboard.html", map[string]any{
-		"Apps":     apps,
-		"Settings": s.settingsSvc.Get(),
-		"Session":  sessionFromContext(r.Context()),
+		"Apps":        apps,
+		"AppMap":      appMap,
+		"Deployments": deps,
+		"Projects":    projects,
+		"Stats":       stats,
+		"Settings":    settings,
+		"ServerIP":    serverIP,
+		"Session":     sessionFromContext(r.Context()),
 	})
 }
 
@@ -70,15 +124,24 @@ func (s *Server) handleApplicationCreate(w http.ResponseWriter, r *http.Request)
 		}
 	}
 
+	serviceType := application.ServiceType(r.FormValue("service_type"))
+	if serviceType == "" {
+		serviceType = application.ServiceTypeWeb
+	}
+
 	app := &application.Application{
-		ID:   id,
-		Name: r.FormValue("name"),
-		Port: formInt(r, "port", 3000),
+		ID:          id,
+		Name:        r.FormValue("name"),
+		Port:        formInt(r, "port", 3000),
+		ServiceType: serviceType,
+		ProjectID:   r.FormValue("project_id"),
 		Source: application.Source{
 			Type:           application.SourceType(r.FormValue("source_type")),
 			GitURL:         r.FormValue("git_url"),
 			GitBranch:      r.FormValue("git_branch"),
 			DockerfilePath: r.FormValue("dockerfile_path"),
+			ServicePath:    r.FormValue("service_path"),
+			BuildContext:   r.FormValue("build_context"),
 			GitAuthType:    r.FormValue("git_auth_type"),
 			GitToken:       r.FormValue("git_token"),
 			GitSSHKey:      r.FormValue("git_ssh_key"),
@@ -150,6 +213,11 @@ func (s *Server) handleApplicationUpdate(w http.ResponseWriter, r *http.Request)
 	app.Source.GitURL = r.FormValue("git_url")
 	app.Source.GitBranch = r.FormValue("git_branch")
 	app.Source.DockerfilePath = r.FormValue("dockerfile_path")
+	app.Source.ServicePath = r.FormValue("service_path")
+	app.Source.BuildContext = r.FormValue("build_context")
+	if st := r.FormValue("service_type"); st != "" {
+		app.ServiceType = application.ServiceType(st)
+	}
 	app.Source.GitAuthType = r.FormValue("git_auth_type")
 	
 	// Only update token/ssh key if a non-empty value was posted (or if cleared explicitly)
@@ -370,8 +438,11 @@ func (s *Server) handleDeploymentDetail(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	buildLog, _ := s.depSvc.GetBuildLog(id)
+
 	s.renderPage(w, r, "deployment_detail.html", map[string]any{
 		"Deployment": dep,
+		"BuildLog":   buildLog,
 		"Session":    sessionFromContext(r.Context()),
 	})
 }
@@ -620,4 +691,31 @@ func (s *Server) handleBackupImport(w http.ResponseWriter, r *http.Request) {
 	_ = s.appSvc.Reload()
 
 	http.Redirect(w, r, "/settings?success=backup_restored", http.StatusFound)
+}
+func (s *Server) handleUnifiedLogs(w http.ResponseWriter, r *http.Request) {
+	apps := s.appSvc.List()
+	selectedAppID := r.URL.Query().Get("app_id")
+	var selectedApp *application.Application
+	if selectedAppID != "" {
+		selectedApp, _ = s.appSvc.Get(selectedAppID)
+	} else if len(apps) > 0 {
+		selectedApp = apps[0]
+	}
+
+	settings := s.settingsSvc.Get()
+	serverIP := settings.ServerIP
+	if serverIP == "" {
+		serverIP = r.Host
+		if strings.Contains(serverIP, ":") {
+			serverIP = strings.Split(serverIP, ":")[0]
+		}
+	}
+
+	s.renderPage(w, r, "logs.html", map[string]any{
+		"Apps":        apps,
+		"SelectedApp": selectedApp,
+		"Settings":    settings,
+		"ServerIP":    serverIP,
+		"Session":     sessionFromContext(r.Context()),
+	})
 }

@@ -44,11 +44,11 @@ type DomainItem struct {
 }
 
 // resolveAppUpstream returns the Caddy upstream for an application.
-// Caddy runs inside liteploy-network and resolves the stable alias via Docker DNS.
-// Format: liteploy-{appID}:{containerPort}
+// Caddy runs inside liteploy-network and resolves the canonical alias via Docker DNS.
+// Format: liteploy-app-{appID}:{containerPort}
 func (s *Server) resolveAppUpstream(_ context.Context, app *application.Application) string {
 	if app.Port > 0 {
-		return fmt.Sprintf("liteploy-%s:%d", app.ID, app.Port)
+		return fmt.Sprintf("liteploy-app-%s:%d", app.ID, app.Port)
 	}
 	return ""
 }
@@ -180,6 +180,11 @@ func (s *Server) handleApplicationAddDomain(w http.ResponseWriter, r *http.Reque
 
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+
+	if app.ServiceType == application.ServiceTypeWorker || app.ServiceType == application.ServiceTypeInternal {
+		http.Redirect(w, r, "/applications/"+id+"?error=Public+domains+cannot+be+assigned+to+"+string(app.ServiceType)+"+services", http.StatusFound)
 		return
 	}
 

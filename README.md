@@ -31,14 +31,14 @@ Traditional self-hosted deployment panels often ship with PostgreSQL, Redis, bac
 
 ---
 
-## 🏗️ Architecture Overview
+### 🏗️ Architecture Overview
 
 ```
                         +----------------------------+
                         |   Browser / Git Webhooks   |
                         +----------------------------+
-                                      │
-                                      ▼
+                                       │
+                                       ▼
                         +----------------------------+
                         |     LITEPLOY Binary        |
                         | (net/http + HTMX + Slog)   |
@@ -52,26 +52,32 @@ Traditional self-hosted deployment panels often ship with PostgreSQL, Redis, bac
             +---------------+  +------------+  +--------------------------+
                                       │                      │
                                       ▼                      ▼
-                          +──────────────────────────────────────────────+
-                          │      Docker Network (liteploy-network)       │
-                          │   ├── liteploy-caddy (:80, :443)             │
-                          │   ├── liteploy-app-001 (alias)               │
-                          │   └── liteploy-app-002 (alias)               │
-                          +──────────────────────────────────────────────+
+        +────────────────────────────────────────────────────────────────────────+
+        │             Isolated Project Network (liteploy-project-xxx)            │
+        │  ├── liteploy-caddy (:80, :443 dynamic bridge attachment)              │
+        │  ├── inventory-api (alias: liteploy-app-001, private port 8080)        │
+        │  ├── storefront-web (alias: liteploy-app-002, port 3000 -> public HTTPS)│
+        │  └── queue-worker (alias: liteploy-app-003, no inbound port)           │
+        +────────────────────────────────────────────────────────────────────────+
 ```
 
 ## 🚀 Key Features
 
-- **⚡ Lightweight Footprint:** Observed idle memory footprint of **~18.5 MB RSS** in internal testing.
-- **🎨 Retro 8-bit Console UI:** A fast, responsive, game-inspired HTMX control panel with mobile sidebar support.
+- **⚡ Lightweight Footprint:** Observed idle memory footprint of **~18.5 MB RSS** in internal testing, engineered for 1 GB RAM VPS.
+- **🎨 Retro 8-bit Console UI:** A distinctive, readable, retro game-inspired HTMX control panel with tactile buttons, live system status, and CRT scanlines.
+- **📁 Native Monorepo Support:** Deploy multiple services from a single repository using granular `ServicePath`, `BuildContext`, and `DockerfilePath` configuration.
+- **🛡️ Zero-Escape Path Sanitization:** Strict lexical and symlink validation (`filepath.EvalSymlinks`) guarantees builds and contexts never escape the repository root.
+- **🕸️ Microservices & Project Network Isolation:** Separate projects into private Docker networks (`liteploy-project-{id}`). Internal microservices communicate privately via friendly DNS names (e.g. `http://inventory-api:8080`).
+- **🏷️ Strict Service Type Rules:** Enforce roles for `web`, `api`, `worker` (outbound-only background jobs), and `internal` (private-only services with public domain blocking).
 - **🌐 One-Domain & Path Routing:** Route multiple services on the same domain (`domain.com` → frontend, `domain.com/api/*` → backend, `domain.com/assets/*` → backend static assets) with automatic Caddy route ordering.
 - **🌐 Primary Domain & Wildcard Subdomains:** Set your root domain once (`example.com`), route your dashboard to `liteploy.example.com`, and deploy applications to any subdomain (`app.example.com`, `api.example.com`) instantly with automatic Caddy TLS.
 - **🧙‍♂️ Initial Setup Wizard:** Guided 2-step onboarding to create admin credentials and configure wildcard DNS with 1-click DNS verification.
 - **📦 Zero-Downtime HTTP Healthchecks:** Validates container HTTP endpoints before switching traffic and gracefully tears down old containers.
 - **♻️ 1-Click Rollbacks:** Instantly revert to a previous successful image deployment in seconds.
 - **🖥️ Native CLI Commands:** Built-in CLI operations (`liteploy status`, `liteploy deploy <app>`, `liteploy logs <app>`) for headless server management.
+- **💾 Zero-Leak SSE Log Streaming:** Efficient file-seek chunk reading eliminates background goroutine and pipe leaks during live build log observation.
 - **💾 1-Click Backup & VPS Migration:** Export and import full platform state as a portable `.tar.gz` archive.
-- **📈 Live Container Metrics:** Real-time CPU and RAM monitoring straight from Docker Stats API.
+- **📈 Live Container Metrics:** Real-time CPU, RAM, disk, and container monitoring straight from host and Docker Stats API.
 - **🧹 System Auto-Prune & Retention:** Built-in garbage collection and automatic pruning of old/failed deployment logs.
 - **🗄️ Persistent Volumes:** Map host directories to containers to ensure database/state survival.
 - **🔄 Dual Workload Sources:** Deploy directly from Git repositories (with persistent fetch cache) or Docker image registries.

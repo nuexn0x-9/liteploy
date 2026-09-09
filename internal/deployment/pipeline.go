@@ -61,6 +61,9 @@ func NewPipeline(
 	logger *slog.Logger,
 	gitTimeout, buildTimeout, healthTimeout time.Duration,
 ) *Pipeline {
+	if logger == nil {
+		logger = slog.Default()
+	}
 	if gitTimeout <= 0 {
 		gitTimeout = 10 * time.Minute
 	}
@@ -102,6 +105,7 @@ func (p *Pipeline) Execute(ctx context.Context, dep *Deployment, progress io.Wri
 	fmt.Fprintf(progress, "[liteploy] Step 1/5: Preparing source (%s)...\n", app.Source.Type)
 
 	var buildContextDir string
+	var absBuildDir string
 	var imageName string
 
 	if dep.RollbackTo != "" {
@@ -112,7 +116,8 @@ func (p *Pipeline) Execute(ctx context.Context, dep *Deployment, progress io.Wri
 		switch app.Source.Type {
 		case application.SourceGit:
 		relBuildDir := filepath.Join("repos", app.ID)
-		absBuildDir, err := p.store.AbsPath(relBuildDir)
+		var err error
+		absBuildDir, err = p.store.AbsPath(relBuildDir)
 		if err != nil {
 			return fmt.Errorf("prepare build dir: %w", err)
 		}
@@ -139,9 +144,27 @@ func (p *Pipeline) Execute(ctx context.Context, dep *Deployment, progress io.Wri
 		}
 
 		dep.CommitSHA = cloneResult.CommitSHA
-		buildContextDir = absBuildDir
 		imageName = fmt.Sprintf("liteploy-%s:%s", app.ID, dep.ID)
 		fmt.Fprintf(progress, "[liteploy] Synced commit %s\n", cloneResult.CommitSHA)
+
+		// Monorepo support: resolve build context safely
+		if app.Source.BuildContext != "" {
+			ctxDir, err := safePathJoin(absBuildDir, app.Source.BuildContext)
+			if err != nil {
+				return fmt.Errorf("invalid build context: %w", err)
+			}
+			buildContextDir = ctxDir
+			fmt.Fprintf(progress, "[liteploy] Monorepo BuildContext: %s\n", app.Source.BuildContext)
+		} else if app.Source.ServicePath != "" {
+			svcDir, err := safePathJoin(absBuildDir, app.Source.ServicePath)
+			if err != nil {
+				return fmt.Errorf("invalid service path: %w", err)
+			}
+			buildContextDir = svcDir
+			fmt.Fprintf(progress, "[liteploy] Monorepo ServicePath: %s\n", app.Source.ServicePath)
+		} else {
+			buildContextDir = absBuildDir
+		}
 
 	case application.SourceImage:
 		imageName = app.Source.ImageRef
@@ -176,6 +199,14 @@ func (p *Pipeline) Execute(ctx context.Context, dep *Deployment, progress io.Wri
 			if dockerfile == "" {
 				dockerfile = "Dockerfile"
 			}
+			// Security check: ensure Dockerfile path does not escape buildContextDir or repository
+			dockerfilePath, err := safePathJoin(buildContextDir, dockerfile)
+			if err != nil {
+				return fmt.Errorf("invalid dockerfile path: %w", err)
+			}
+			if _, err := safePathJoin(absBuildDir, dockerfilePath); err != nil {
+				return fmt.Errorf("dockerfile escapes repository: %w", err)
+			}
 
 			// For Next.js, Nuxt, Vite, React, etc., build-time env vars (e.g. NEXT_PUBLIC_API_URL=/api)
 			// must be present during `npm run build`. We inject both .env/.env.production and Docker BuildArgs.
@@ -185,8 +216,10 @@ func (p *Pipeline) Execute(ctx context.Context, dep *Deployment, progress io.Wri
 					envContent.WriteString(fmt.Sprintf("%s=%s\n", k, v))
 				}
 				envBytes := []byte(envContent.String())
-				_ = os.WriteFile(filepath.Join(buildContextDir, ".env"), envBytes, 0600)
-				_ = os.WriteFile(filepath.Join(buildContextDir, ".env.production"), envBytes, 0600)
+				envDot := filepath.Join(buildContextDir, ".env")
+				envProd := filepath.Join(buildContextDir, ".env.production")
+				_ = os.WriteFile(envDot, envBytes, 0600)
+				_ = os.WriteFile(envProd, envBytes, 0600)
 				fmt.Fprintf(progress, "[liteploy] Injected %d build-time environment variables (.env / .env.production)\n", len(envVars))
 			}
 
@@ -233,8 +266,14 @@ func (p *Pipeline) Execute(ctx context.Context, dep *Deployment, progress io.Wri
 	dep.Stage = "starting"
 	fmt.Fprintf(progress, "[liteploy] Step 3/5: Creating and starting container...\n")
 
-	// Ensure common internal network exists
+	// Project-level network isolation:
+	// If application belongs to a project, isolate inside liteploy-project-{project_id}.
+	// Otherwise, fallback to the global internal network liteploy-network.
 	networkName := proxy.LiteployNetwork
+	if app.ProjectID != "" {
+		networkName = fmt.Sprintf("liteploy-project-%s", app.ProjectID)
+	}
+
 	if p.dockerCli != nil {
 		if _, err := p.dockerCli.EnsureNetwork(ctx, networkName); err != nil {
 			p.logger.Warn("pipeline: ensure network warning", "network", networkName, "error", err)
@@ -242,9 +281,14 @@ func (p *Pipeline) Execute(ctx context.Context, dep *Deployment, progress io.Wri
 	}
 
 	containerName := fmt.Sprintf("liteploy-%s-%s", app.ID, dep.ID)
-	// stableAlias lets Caddy (inside liteploy-network) resolve this container
-	// via Docker DNS as "liteploy-{appID}" — stable across redeployments.
-	stableAlias := fmt.Sprintf("liteploy-%s", app.ID)
+	// Canonical identity: liteploy-app-{appID}
+	canonicalAlias := fmt.Sprintf("liteploy-app-%s", app.ID)
+	// Compatibility identity: liteploy-{appID}
+	compatAlias := fmt.Sprintf("liteploy-%s", app.ID)
+	// Friendly DNS alias: lowercase application name
+	friendlyAlias := strings.ToLower(app.Name)
+	aliases := []string{canonicalAlias, compatAlias, friendlyAlias}
+
 	labels := app.ManagedLabels()
 	labels["liteploy.deployment_id"] = dep.ID
 
@@ -253,7 +297,6 @@ func (p *Pipeline) Execute(ctx context.Context, dep *Deployment, progress io.Wri
 	for k, v := range envVars {
 		envList = append(envList, fmt.Sprintf("%s=%s", k, v))
 	}
-
 
 	var memMB int64
 	var cpus float64
@@ -276,7 +319,7 @@ func (p *Pipeline) Execute(ctx context.Context, dep *Deployment, progress io.Wri
 		ContainerPort:  app.Port,
 		HostPort:       0, // no host port needed — Caddy reaches container via Docker DNS
 		NetworkName:    networkName,
-		NetworkAliases: []string{stableAlias},
+		NetworkAliases: aliases,
 		MemoryMB:       memMB,
 		CPUs:           cpus,
 		RestartPolicy:  "unless-stopped",
@@ -315,10 +358,21 @@ func (p *Pipeline) Execute(ctx context.Context, dep *Deployment, progress io.Wri
 	dep.Stage = "routing"
 	fmt.Fprintf(progress, "[liteploy] Step 5/5: Configuring reverse proxy routes...\n")
 
-	if len(app.Domains) > 0 && app.Port > 0 && p.proxyMgr != nil {
-		// Caddy runs in liteploy-network and resolves the stable alias via Docker DNS.
-		// Format: liteploy-{appID}:{containerPort}
-		upstream := fmt.Sprintf("liteploy-%s:%d", app.ID, app.Port)
+	// Service Type Enforcement: worker and internal services must NEVER expose public ingress routes
+	if app.ServiceType == application.ServiceTypeWorker || app.ServiceType == application.ServiceTypeInternal {
+		fmt.Fprintf(progress, "[liteploy] Service type is %q (internal/worker only). Skipping Caddy ingress routing.\n", app.ServiceType)
+	} else if len(app.Domains) > 0 && app.Port > 0 && p.proxyMgr != nil {
+		// Ensure Caddy container (liteploy-caddy) is connected to the project network
+		// if this container is isolated on a dedicated project network.
+		if p.dockerCli != nil && networkName != proxy.LiteployNetwork {
+			if err := p.dockerCli.ConnectNetwork(ctx, networkName, "liteploy-caddy", nil); err != nil {
+				p.logger.Warn("pipeline: connect caddy to project network warning", "network", networkName, "error", err)
+			}
+		}
+
+		// Caddy resolves the canonical alias via Docker DNS.
+		// Format: liteploy-app-{appID}:{containerPort}
+		upstream := fmt.Sprintf("liteploy-app-%s:%d", app.ID, app.Port)
 		fmt.Fprintf(progress, "[liteploy] Routing %v -> %s (Docker DNS)\n", app.Domains, upstream)
 		
 		newRoute := &proxy.Route{
@@ -454,4 +508,44 @@ func checkHTTPGet(url string, timeout time.Duration) bool {
 	}
 	resp.Body.Close()
 	return resp.StatusCode >= 200 && resp.StatusCode < 400
+}
+
+// safePathJoin securely resolves a subpath within baseDir, preventing path traversal
+// and symlink escapes outside baseDir.
+func safePathJoin(baseDir, subPath string) (string, error) {
+	cleanBase := filepath.Clean(baseDir)
+	if subPath == "" {
+		return cleanBase, nil
+	}
+	target := filepath.Clean(filepath.Join(cleanBase, subPath))
+	rel, err := filepath.Rel(cleanBase, target)
+	if err != nil || strings.HasPrefix(rel, "..") || strings.Contains(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("security violation: path %q attempts to escape repository directory", subPath)
+	}
+
+	// Canonical symlink validation: evaluate real path on disk to prevent symlink escapes
+	realBase, err := filepath.EvalSymlinks(cleanBase)
+	if err != nil {
+		realBase = cleanBase
+	}
+
+	// Check target or its existing ancestor to ensure symlink traversal does not escape baseDir
+	curr := target
+	for {
+		realCurr, err := filepath.EvalSymlinks(curr)
+		if err == nil {
+			relReal, err := filepath.Rel(realBase, realCurr)
+			if err != nil || strings.HasPrefix(relReal, "..") || strings.Contains(relReal, ".."+string(filepath.Separator)) {
+				return "", fmt.Errorf("security violation: path %q contains symlinks escaping repository directory (%s)", subPath, realCurr)
+			}
+			break
+		}
+		parent := filepath.Dir(curr)
+		if parent == curr || parent == "." {
+			break
+		}
+		curr = parent
+	}
+
+	return target, nil
 }

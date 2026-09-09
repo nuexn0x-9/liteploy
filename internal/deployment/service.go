@@ -49,8 +49,9 @@ type Service struct {
 	// cancel functions for active jobs.
 	cancelFns map[string]context.CancelFunc
 
-	shutdownCh chan struct{}
-	wg         sync.WaitGroup
+	shutdownCh   chan struct{}
+	shutdownOnce sync.Once
+	wg           sync.WaitGroup
 }
 
 type job struct {
@@ -96,6 +97,15 @@ func NewService(
 // Enqueue creates a new deployment and adds it to the job queue.
 // Returns the deployment ID immediately (non-blocking).
 func (s *Service) Enqueue(ctx context.Context, appID, triggeredBy string) (*Deployment, error) {
+	s.mu.RLock()
+	for _, existing := range s.deployments {
+		if existing.AppID == appID && existing.Status.IsActive() {
+			s.mu.RUnlock()
+			return nil, fmt.Errorf("application %q already has an active deployment (#%s)", appID, existing.ID)
+		}
+	}
+	s.mu.RUnlock()
+
 	depID, err := s.nextDeploymentID(appID)
 	if err != nil {
 		return nil, fmt.Errorf("enqueue: %w", err)
@@ -199,26 +209,28 @@ func (s *Service) ListAll() []*Deployment {
 
 // Shutdown stops accepting new work and waits for active deployments to finish or timeout.
 func (s *Service) Shutdown(timeout time.Duration) {
-	close(s.shutdownCh)
+	s.shutdownOnce.Do(func() {
+		close(s.shutdownCh)
 
-	// Cancel all active jobs.
-	s.mu.Lock()
-	for _, cancel := range s.cancelFns {
-		cancel()
-	}
-	s.mu.Unlock()
+		// Cancel all active jobs.
+		s.mu.Lock()
+		for _, cancel := range s.cancelFns {
+			cancel()
+		}
+		s.mu.Unlock()
 
-	done := make(chan struct{})
-	go func() {
-		s.wg.Wait()
-		close(done)
-	}()
+		done := make(chan struct{})
+		go func() {
+			s.wg.Wait()
+			close(done)
+		}()
 
-	select {
-	case <-done:
-	case <-time.After(timeout):
-		s.logger.Warn("deployment shutdown timed out; some deployments may be incomplete")
-	}
+		select {
+		case <-done:
+		case <-time.After(timeout):
+			s.logger.Warn("deployment shutdown timed out; some deployments may be incomplete")
+		}
+	})
 }
 
 // startWorkers launches the bounded worker goroutines.
@@ -397,6 +409,30 @@ func (s *Service) buildLogPath(dep *Deployment) (string, error) {
 	return s.store.AbsPath(filepath.Join(logDir, "build.log"))
 }
 
+// GetBuildLog returns the full build log content as a string (or empty if none).
+func (s *Service) GetBuildLog(deploymentID string) (string, error) {
+	s.mu.RLock()
+	dep, ok := s.deployments[deploymentID]
+	s.mu.RUnlock()
+	if !ok {
+		return "", fmt.Errorf("deployment %q not found", deploymentID)
+	}
+
+	logPath, err := s.buildLogPath(dep)
+	if err != nil {
+		return "", err
+	}
+
+	data, err := os.ReadFile(logPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", nil
+		}
+		return "", fmt.Errorf("read build log: %w", err)
+	}
+	return string(data), nil
+}
+
 // StreamBuildLog streams the build log of a deployment to the given writer.
 // It streams the file in bounded chunks; the caller should handle io.EOF.
 func (s *Service) StreamBuildLog(deploymentID string, w io.Writer) error {
@@ -425,6 +461,45 @@ func (s *Service) StreamBuildLog(deploymentID string, w io.Writer) error {
 	buf := make([]byte, 32*1024)
 	_, err = io.CopyBuffer(w, f, buf)
 	return err
+}
+
+// ReadBuildLogChunk reads new log bytes from the given offset without re-reading previous lines
+// or allocating unnecessary background goroutines/pipes.
+func (s *Service) ReadBuildLogChunk(deploymentID string, offset int64) ([]byte, int64, error) {
+	s.mu.RLock()
+	dep, ok := s.deployments[deploymentID]
+	s.mu.RUnlock()
+	if !ok {
+		return nil, offset, fmt.Errorf("deployment %q not found", deploymentID)
+	}
+
+	logPath, err := s.buildLogPath(dep)
+	if err != nil {
+		return nil, offset, err
+	}
+
+	f, err := os.Open(logPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, offset, nil
+		}
+		return nil, offset, fmt.Errorf("open build log: %w", err)
+	}
+	defer f.Close()
+
+	if offset > 0 {
+		if _, err := f.Seek(offset, io.SeekStart); err != nil {
+			return nil, offset, fmt.Errorf("seek build log: %w", err)
+		}
+	}
+
+	buf := make([]byte, 16*1024)
+	n, err := f.Read(buf)
+	if err != nil && err != io.EOF {
+		return nil, offset, fmt.Errorf("read build log: %w", err)
+	}
+
+	return buf[:n], offset + int64(n), nil
 }
 
 // loadAll reads all deployment records from storage at startup.
@@ -504,6 +579,15 @@ func (s *Service) EnqueueRollback(ctx context.Context, appID, oldDepID, triggere
 	if oldDep.ImageID == "" {
 		return nil, fmt.Errorf("rollback target has no image ID")
 	}
+
+	s.mu.RLock()
+	for _, existing := range s.deployments {
+		if existing.AppID == appID && existing.Status.IsActive() {
+			s.mu.RUnlock()
+			return nil, fmt.Errorf("application %q already has an active deployment (#%s)", appID, existing.ID)
+		}
+	}
+	s.mu.RUnlock()
 
 	depID, err := s.nextDeploymentID(appID)
 	if err != nil {

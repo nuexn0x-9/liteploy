@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/liteploy/liteploy/internal/auth"
@@ -189,9 +190,22 @@ func apiOK(w http.ResponseWriter, data any) {
 	json.NewEncoder(w).Encode(data)
 }
 
-// renderPage renders an HTML template. On error, a 500 is returned.
+// renderPage renders an HTML template. Automatically provides ServerIP to topbar.
 func (s *Server) renderPage(w http.ResponseWriter, r *http.Request, name string, data any) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if m, ok := data.(map[string]any); ok {
+		if _, exists := m["ServerIP"]; !exists {
+			settings := s.settingsSvc.Get()
+			serverIP := settings.ServerIP
+			if serverIP == "" {
+				serverIP = r.Host
+				if strings.Contains(serverIP, ":") {
+					serverIP = strings.Split(serverIP, ":")[0]
+				}
+			}
+			m["ServerIP"] = serverIP
+		}
+	}
 	if err := s.templates.ExecuteTemplate(w, name, data); err != nil {
 		s.logger.Error("template render error", "template", name, "error", err)
 		// Don't write another header — just log.

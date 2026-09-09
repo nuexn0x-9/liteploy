@@ -57,6 +57,14 @@ func (s *Service) Create(ctx context.Context, app *Application) error {
 		return fmt.Errorf("application %q already exists", app.ID)
 	}
 
+	if app.ProjectID != "" {
+		for _, existing := range s.apps {
+			if existing.ProjectID == app.ProjectID && strings.EqualFold(existing.Name, app.Name) {
+				return fmt.Errorf("service name %q already exists in project %q (service names must be unique within a project)", app.Name, app.ProjectID)
+			}
+		}
+	}
+
 	now := time.Now().UTC()
 	app.CreatedAt = now
 	app.UpdatedAt = now
@@ -121,6 +129,14 @@ func (s *Service) Update(ctx context.Context, app *Application) error {
 	existing, ok := s.apps[app.ID]
 	if !ok {
 		return fmt.Errorf("application %q not found", app.ID)
+	}
+
+	if app.ProjectID != "" {
+		for _, other := range s.apps {
+			if other.ID != app.ID && other.ProjectID == app.ProjectID && strings.EqualFold(other.Name, app.Name) {
+				return fmt.Errorf("service name %q already exists in project %q (service names must be unique within a project)", app.Name, app.ProjectID)
+			}
+		}
 	}
 
 	// Preserve immutable fields.
@@ -275,4 +291,49 @@ func (s *Service) GetEnv(id string) (map[string]string, error) {
 func (s *Service) SetEnv(id string, env map[string]string) error {
 	relPath := filepath.Join("applications", id, "env.json")
 	return s.store.WriteJSON(relPath, env)
+}
+
+// ListProjects returns all stored projects.
+func (s *Service) ListProjects() ([]*Project, error) {
+	dirs, err := s.store.ListDir("projects")
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var res []*Project
+	for _, id := range dirs {
+		var p Project
+		rel := filepath.Join("projects", id, "project.json")
+		if err := s.store.ReadJSON(rel, &p); err == nil {
+			res = append(res, &p)
+		}
+	}
+	sort.Slice(res, func(i, j int) bool {
+		return res[i].CreatedAt.After(res[j].CreatedAt)
+	})
+	return res, nil
+}
+
+// CreateProject persists a new project.
+func (s *Service) CreateProject(p *Project) error {
+	if p.ID == "" {
+		return fmt.Errorf("project ID required")
+	}
+	now := time.Now().UTC()
+	p.CreatedAt = now
+	p.UpdatedAt = now
+	rel := filepath.Join("projects", p.ID, "project.json")
+	return s.store.WriteJSON(rel, p)
+}
+
+// DeleteProject removes a project.
+func (s *Service) DeleteProject(id string) error {
+	rel := filepath.Join("projects", id)
+	abs, err := s.store.AbsPath(rel)
+	if err != nil {
+		return err
+	}
+	return os.RemoveAll(abs)
 }

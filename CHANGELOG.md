@@ -5,6 +5,20 @@ All notable changes to the LITEPLOY project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v1.2.0] - 2026-09-09
+
+### Added
+- **Monorepo Architecture Support:** Native support for `ServicePath`, `BuildContext`, and `DockerfilePath` configuration per application, allowing multiple frontend/backend/worker services to build from a single Git repository.
+- **Monorepo Security & Symlink Protection:** Strict subpath validation blocking directory traversal (`..`, absolute paths) and real-path symlink evaluation (`filepath.EvalSymlinks`) ensuring builds cannot escape repository boundaries.
+- **Microservices & Project-Level Network Isolation:** Project abstraction (`liteploy-project-{project_id}`) providing private Docker bridge networks. Services within the same project communicate privately via internal DNS aliases.
+- **Microservice DNS Naming:** Canonical container alias `liteploy-app-{id}`, compatibility alias `liteploy-{id}`, and friendly DNS alias `strings.ToLower(app.Name)` unique within each project.
+- **Dynamic Multi-Network Caddy Routing:** Caddy reverse proxy dynamically attaches to project bridge networks when exposing public `web` or `api` services.
+- **Service Type Rules Matrix:** Defined 4 distinct service types (`web`, `api`, `worker`, `internal`). Public domain routing is strictly prohibited on `worker` and `internal` services.
+- **Zero-Leak SSE Log Streaming:** Replaced unbounded goroutine/pipe SSE streaming with seek-based chunk reading (`ReadBuildLogChunk`), eliminating memory and file-descriptor leaks during live build log observation on low-spec VPS.
+- **Retro Gaming CRT / Pixel UI Redesign:** Unified design across all pages (`retro-window`, `topbar`, `sidebar`, `retro-content-canvas`) with an accessible soft retro palette, live CRT scanline effects, dynamic server stats, and mobile sidebar navigation.
+- **Dynamic Resource Telemetry:** Added live container count and resource monitoring percentages to the dashboard and top bar.
+- **Automated Hardening Test Suite:** Added comprehensive hardening tests covering monorepo traversal validation, service type enforcement, project friendly name uniqueness, microservice network isolation, concurrency mutual exclusion, and zero-leak build log streaming.
+
 ---
 
 ## [v1.1.0] - 2026-08-24

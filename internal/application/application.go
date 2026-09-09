@@ -8,6 +8,7 @@ package application
 import (
 	"errors"
 	"fmt"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -53,6 +54,12 @@ type Application struct {
 	// Source describes where the application comes from.
 	Source Source `json:"source"`
 
+	// ProjectID links this application to an optional parent project.
+	ProjectID string `json:"project_id,omitempty"`
+
+	// ServiceType categorizes the workload.
+	ServiceType ServiceType `json:"service_type,omitempty"`
+
 	// Status is the current runtime state. This is derived from Docker state
 	// on startup and updated by the deployment engine.
 	Status Status `json:"status"`
@@ -94,6 +101,16 @@ type Application struct {
 	Volumes []Volume `json:"volumes,omitempty"`
 }
 
+// ServiceType indicates whether the workload is web, api, worker, or internal microservice.
+type ServiceType string
+
+const (
+	ServiceTypeWeb      ServiceType = "web"
+	ServiceTypeAPI      ServiceType = "api"
+	ServiceTypeWorker   ServiceType = "worker"
+	ServiceTypeInternal ServiceType = "internal"
+)
+
 // Volume defines a persistent storage mapping.
 type Volume struct {
 	HostPath      string `json:"host_path"`
@@ -108,6 +125,8 @@ type Source struct {
 	GitURL         string `json:"git_url,omitempty"`
 	GitBranch      string `json:"git_branch,omitempty"`
 	DockerfilePath string `json:"dockerfile_path,omitempty"` // default "Dockerfile"
+	ServicePath    string `json:"service_path,omitempty"`    // Monorepo service subfolder
+	BuildContext   string `json:"build_context,omitempty"`   // Relative build context directory
 	GitAuthType    string `json:"git_auth_type,omitempty"`    // "none", "token", "ssh_key"
 	GitToken       string `json:"git_token,omitempty"`        // Personal Access Token / password
 	GitSSHKey      string `json:"git_ssh_key,omitempty"`      // Private SSH key
@@ -159,6 +178,20 @@ func (a *Application) Validate() error {
 		errs = append(errs, fmt.Sprintf("port %d is invalid", a.Port))
 	}
 
+	// ServiceType validation & domain rules
+	if a.ServiceType == "" {
+		a.ServiceType = ServiceTypeWeb
+	}
+	switch a.ServiceType {
+	case ServiceTypeWeb, ServiceTypeAPI, ServiceTypeWorker, ServiceTypeInternal:
+	default:
+		errs = append(errs, fmt.Sprintf("invalid service_type %q (must be web, api, worker, or internal)", a.ServiceType))
+	}
+
+	if (a.ServiceType == ServiceTypeWorker || a.ServiceType == ServiceTypeInternal) && len(a.Domains) > 0 {
+		errs = append(errs, fmt.Sprintf("service type %q cannot have public domain routes", a.ServiceType))
+	}
+
 	for _, d := range a.Domains {
 		host, _, err := ParseDomainRoute(d)
 		if err != nil {
@@ -186,6 +219,22 @@ func (a *Application) ManagedLabels() map[string]string {
 	}
 }
 
+// validateRelativeSubpath ensures that a path is relative and does not contain path traversal (e.g. "..").
+func validateRelativeSubpath(p, fieldName string) error {
+	if p == "" {
+		return nil
+	}
+	// Disallow absolute paths (POSIX / or Windows C:\ or \\)
+	if filepath.IsAbs(p) || strings.HasPrefix(p, "/") || strings.HasPrefix(p, "\\") || (len(p) > 1 && p[1] == ':') {
+		return fmt.Errorf("%s must be a relative path, got %q", fieldName, p)
+	}
+	cleaned := filepath.Clean(p)
+	if cleaned == ".." || strings.HasPrefix(cleaned, ".."+string(filepath.Separator)) || strings.HasPrefix(cleaned, "../") || strings.HasPrefix(cleaned, "..\\") {
+		return fmt.Errorf("%s contains illegal path traversal: %q", fieldName, p)
+	}
+	return nil
+}
+
 // validateSource checks that a Source has consistent, valid fields.
 func validateSource(s Source) error {
 	switch s.Type {
@@ -204,6 +253,16 @@ func validateSource(s Source) error {
 			!strings.HasPrefix(lower, "git@") &&
 			!strings.HasPrefix(lower, "ssh://") {
 			return errors.New("git_url must use https://, http://, git@, or ssh:// scheme")
+		}
+
+		if err := validateRelativeSubpath(s.ServicePath, "service_path"); err != nil {
+			return err
+		}
+		if err := validateRelativeSubpath(s.BuildContext, "build_context"); err != nil {
+			return err
+		}
+		if err := validateRelativeSubpath(s.DockerfilePath, "dockerfile_path"); err != nil {
+			return err
 		}
 
 

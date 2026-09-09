@@ -8,46 +8,28 @@
     <script src="/static/js/htmx.min.js" defer></script>
     <script src="/static/js/app.js" defer></script>
 </head>
-<body class="app-layout">
-    <div class="mobile-topbar">
-        <a href="/" class="logo">LITEPLOY</a>
-        <button class="sidebar-toggle" onclick="document.querySelector('.sidebar').classList.toggle('open')" aria-label="Toggle navigation">☰</button>
-    </div>
-    <nav class="sidebar" role="navigation" aria-label="Main navigation">
-        <div class="sidebar-header">
-            <a href="/" class="logo">LITEPLOY<span class="logo-tagline">> DEPLOYMENT CONSOLE</span></a>
-            <div class="version-tag">{{appVersion}}</div>
-        </div>
-        <ul class="nav-links">
-            <li><a href="/" class="nav-link"><span class="nav-icon">◈</span> CONTROL ROOM</a></li>
-            <li><a href="/applications" class="nav-link"><span class="nav-icon">▣</span> APPLICATIONS</a></li>
-            <li><a href="/deployments" class="nav-link"><span class="nav-icon">▲</span> DEPLOYMENTS</a></li>
-            <li><a href="/domains" class="nav-link active" aria-current="page"><span class="nav-icon">◉</span> NETWORK</a></li>
-            <li><a href="/settings" class="nav-link"><span class="nav-icon">✦</span> SYS CONFIG</a></li>
-        </ul>
-        <div class="sidebar-footer">
-            {{if .Session}}
-            <span class="user-badge">{{.Session.Username}}</span>
-            <form method="POST" action="/logout">
-                <input type="hidden" name="_csrf" value="{{.Session.CSRFToken}}">
-                <button type="submit" class="btn-logout">[ LOGOUT ]</button>
-            </form>
-            {{end}}
-        </div>
-    </nav>
-    <main class="main-content" role="main">
-        <div class="page-header">
-            <div>
-                <h1>NETWORK TERMINALS</h1>
-                <p class="subtitle">Active domain mappings routed via Caddy Reverse Proxy</p>
+<body class="retro-window">
+    <!-- Top Bar -->
+    {{template "topbar" .}}
+
+    <div class="app-body">
+        <!-- Sidebar Navigation -->
+        {{template "sidebar" (dict "ActiveNav" "domains" "Session" .Session)}}
+
+        <!-- Main Content -->
+        <main class="retro-content-canvas" role="main">
+            <div class="dashboard-top-banner">
+                <div class="dashboard-title-group">
+                    <h1>Network &amp; Domain Terminals</h1>
+                    <p>Active domain mappings routed via Caddy Reverse Proxy and SSL/TLS Manager.</p>
+                </div>
+                <div>
+                    <a href="/settings" class="retro-btn-primary">[ CONFIGURE PRIMARY DOMAIN ]</a>
+                </div>
             </div>
-            <div>
-                <a href="/settings" class="btn btn-primary">[ CONFIGURE PRIMARY DOMAIN ]</a>
-            </div>
-        </div>
 
         <!-- Primary Domain Status Card -->
-        <div class="card mb-4" style="border: 2px solid var(--rp-surface2);">
+        <div class="card mb-4">
             <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
                 <h2><span class="card-icon">◉</span> PRIMARY DOMAIN &amp; WILDCARD HOSTING</h2>
                 <div>
@@ -82,7 +64,7 @@
                 {{else}}
                 <p class="text-muted" style="margin: 0;">
                     No primary domain set. Configure a primary domain (e.g. <code>example.com</code>) to enable automatic wildcard subdomains (<code>app.example.com</code>, <code>api.example.com</code>) with instant SSL/TLS.
-                    <a href="/settings" style="color: var(--rp-primary); margin-left: 5px;">Setup Primary Domain →</a>
+                    <a href="/settings" style="color: var(--color-primary); font-weight: bold; margin-left: 5px;">Setup Primary Domain →</a>
                 </p>
                 {{end}}
             </div>
@@ -91,7 +73,7 @@
         <div class="info-box">
             <div class="info-box-icon">◈</div>
             <div class="info-box-content">
-                <strong style="font-family:var(--font-pixel); font-size:0.42rem; color:var(--rp-primary)">ROUTING PROTOCOL</strong><br>
+                <strong style="font-family:var(--font-display); font-size:0.85rem; color:var(--color-primary)">ROUTING PROTOCOL</strong><br>
                 Point your domain <code>A</code> or <code>AAAA</code> record to your VPS IP (<code>{{.ServerIP}}</code>). Caddy will automatically provision Let's Encrypt / ZeroSSL TLS certificates and proxy traffic to the designated application container port.
             </div>
         </div>
@@ -149,6 +131,7 @@
         </div>
         {{end}}
     </main>
+    </div>
 
     <script>
     function checkDomainDNS(btn, domain) {

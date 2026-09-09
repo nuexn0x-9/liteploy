@@ -818,7 +818,8 @@ func TestRouting_Test18_FrontendAdminLogin_RegressionTest(t *testing.T) {
 
 // mockDockerEngineWithBuildCapture implements minimal docker.Engine to capture BuildOptions.
 type mockDockerEngineWithBuildCapture struct {
-	onBuild func(opts docker.BuildOptions)
+	onBuild  func(opts docker.BuildOptions)
+	onCreate func(spec docker.ContainerSpec)
 }
 
 func (m *mockDockerEngineWithBuildCapture) Ping(ctx context.Context) error { return nil }
@@ -829,6 +830,9 @@ func (m *mockDockerEngineWithBuildCapture) InspectContainer(ctx context.Context,
 	return &docker.ContainerInfo{ID: id, Status: "running", Health: "healthy"}, nil
 }
 func (m *mockDockerEngineWithBuildCapture) CreateContainer(ctx context.Context, spec docker.ContainerSpec) (string, error) {
+	if m.onCreate != nil {
+		m.onCreate(spec)
+	}
 	return "mock-container-id", nil
 }
 func (m *mockDockerEngineWithBuildCapture) StartContainer(ctx context.Context, id string) error {

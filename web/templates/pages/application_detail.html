@@ -8,58 +8,46 @@
     <script src="/static/js/htmx.min.js" defer></script>
     <script src="/static/js/app.js" defer></script>
 </head>
-<body class="app-layout">
-    <div class="mobile-topbar">
-        <a href="/" class="logo">LITEPLOY</a>
-        <button class="sidebar-toggle" onclick="document.querySelector('.sidebar').classList.toggle('open')" aria-label="Toggle navigation">☰</button>
-    </div>
-    <nav class="sidebar" role="navigation" aria-label="Main navigation">
-        <div class="sidebar-header">
-            <a href="/" class="logo">LITEPLOY<span class="logo-tagline">> DEPLOYMENT CONSOLE</span></a>
-            <div class="version-tag">{{appVersion}}</div>
-        </div>
-        <ul class="nav-links">
-            <li><a href="/" class="nav-link"><span class="nav-icon">◈</span> CONTROL ROOM</a></li>
-            <li><a href="/applications" class="nav-link active"><span class="nav-icon">▣</span> APPLICATIONS</a></li>
-            <li><a href="/deployments" class="nav-link"><span class="nav-icon">▲</span> DEPLOYMENTS</a></li>
-            <li><a href="/domains" class="nav-link"><span class="nav-icon">◉</span> NETWORK</a></li>
-            <li><a href="/settings" class="nav-link"><span class="nav-icon">✦</span> SYS CONFIG</a></li>
-        </ul>
-        <div class="sidebar-footer">
-            {{if .Session}}
-            <span class="user-badge">{{.Session.Username}}</span>
-            <form method="POST" action="/logout">
-                <input type="hidden" name="_csrf" value="{{.Session.CSRFToken}}">
-                <button type="submit" class="btn-logout">[ LOGOUT ]</button>
-            </form>
-            {{end}}
-        </div>
-    </nav>
+<body class="retro-window">
+    <!-- Top Bar -->
+    {{template "topbar" .}}
 
-    <main class="main-content" role="main">
-        <!-- Header -->
-        <div class="page-header">
-            <div>
-                <div class="breadcrumb">
-                    <a href="/applications">APPLICATIONS</a> / <span>{{.App.ID}}</span>
+    <div class="app-body">
+        <!-- Sidebar Navigation -->
+        {{template "sidebar" (dict "ActiveNav" "applications" "Session" .Session)}}
+
+        <!-- Main Content -->
+        <main class="retro-content-canvas" role="main">
+            <!-- Header -->
+            <div class="dashboard-top-banner">
+                <div class="dashboard-title-group">
+                    <div class="breadcrumb" style="margin-bottom: 0.25rem;">
+                        <a href="/applications" style="color: var(--rp-subtle); text-decoration: none;">APPLICATIONS</a> / <span style="color: var(--rp-text);">{{.App.ID}}</span>
+                    </div>
+                    <div class="title-with-status" style="display: flex; align-items: center; gap: 0.75rem;">
+                        <h1 style="margin: 0;">{{.App.Name}}</h1>
+                        <span class="status-badge status-{{.App.Status}}">{{.App.Status}}</span>
+                        <span class="badge-neutral" style="font-size: 0.35rem; font-weight: bold; text-transform: uppercase;">
+                            ROLE: {{if .App.ServiceType}}{{.App.ServiceType}}{{else}}web{{end}}
+                        </span>
+                    </div>
                 </div>
-                <div class="title-with-status">
-                    <h1>{{.App.Name}}</h1>
-                    <span class="status-badge status-{{.App.Status}}">{{.App.Status}}</span>
+                <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                    <a href="/applications/{{.App.ID}}/logs" class="retro-btn-secondary">[ 📄 RUNTIME LOGS ]</a>
+                    <form method="POST" action="/applications/{{.App.ID}}/deploy" style="display:inline">
+                        <input type="hidden" name="_csrf" value="{{if .Session}}{{.Session.CSRFToken}}{{end}}">
+                        <button type="submit" class="retro-btn-primary">[ 🚀 DEPLOY NOW ]</button>
+                    </form>
                 </div>
                 {{if eq .App.Status "running"}}
-                <div hx-get="/applications/{{.App.ID}}/stats" hx-trigger="every 5s" hx-swap="innerHTML" style="margin-top: 10px; font-family: var(--font-mono); font-size: 0.8rem; background: var(--rp-base); padding: 5px; border: 1px solid var(--rp-surface2);">
+                <div hx-get="/applications/{{.App.ID}}/stats" hx-trigger="every 5s" hx-swap="innerHTML" style="margin-top: 10px; font-family: var(--font-mono); font-size: 0.82rem; background: var(--color-surface); padding: 0.5rem 0.75rem; border: var(--border-width) solid var(--color-border); border-radius: var(--border-radius); box-shadow: var(--shadow-retro-sm);">
                     <span class="text-muted">Loading metrics...</span>
                 </div>
                 {{end}}
             </div>
 
-            <!-- Action Buttons -->
-            <div class="header-actions">
-                <a href="/applications/{{.App.ID}}/logs" class="btn btn-secondary">
-                    LOG
-                </a>
-
+            <!-- Action Buttons Toolbar -->
+            <div class="header-actions" style="margin-top: 0.75rem; display: flex; gap: 0.5rem; flex-wrap: wrap;">
                 {{if eq .App.Status "running"}}
                 <form method="POST" action="/applications/{{.App.ID}}/restart" style="display:inline">
                     <input type="hidden" name="_csrf" value="{{if .Session}}{{.Session.CSRFToken}}{{end}}">
@@ -142,6 +130,29 @@
                         </div>
                     </div>
 
+                    <div class="form-row">
+                        <div class="form-group flex-1">
+                            <label for="service_path">MONOREPO SERVICE PATH</label>
+                            <input type="text" id="service_path" name="service_path" value="{{.App.Source.ServicePath}}" placeholder="e.g. services/api">
+                            <small>Subdirectory containing this service's source code.</small>
+                        </div>
+                        <div class="form-group flex-1">
+                            <label for="build_context">BUILD CONTEXT</label>
+                            <input type="text" id="build_context" name="build_context" value="{{.App.Source.BuildContext}}" placeholder="e.g. .">
+                            <small>Directory for Docker build context.</small>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="service_type">SERVICE TYPE</label>
+                        <select id="service_type" name="service_type">
+                            <option value="web" {{if eq .App.ServiceType "web"}}selected{{end}}>PUBLIC WEB SERVICE (HTTPS + Domain)</option>
+                            <option value="api" {{if eq .App.ServiceType "api"}}selected{{end}}>API SERVICE (Public or Cluster)</option>
+                            <option value="internal" {{if eq .App.ServiceType "internal"}}selected{{end}}>INTERNAL MICROSERVICE (Internal DNS Only, No Public Port)</option>
+                            <option value="worker" {{if eq .App.ServiceType "worker"}}selected{{end}}>BACKGROUND WORKER (No Inbound Ports)</option>
+                        </select>
+                    </div>
+
                     <div class="form-group">
                         <label for="git_auth_type">AUTHENTICATION (PRIVATE REPOS)</label>
                         <select id="git_auth_type" name="git_auth_type" onchange="showDetailGitAuth(this.value)">
@@ -205,9 +216,10 @@
                     </div>
                     <dl class="info-list">
                         <dt>APP ID</dt><dd><code>{{.App.ID}}</code></dd>
-                        <dt>SOURCE</dt><dd><span class="badge-neutral">{{.App.Source.Type}}</span></dd>
+                        <dt>TYPE</dt><dd><span class="badge-neutral">{{if .App.ServiceType}}{{.App.ServiceType}}{{else}}web{{end}}</span></dd>
+                        <dt>INTERNAL DNS</dt><dd><code>http://{{.App.Name}}:{{.App.Port}}</code></dd>
                         <dt>CONTAINER</dt><dd>{{if .App.ContainerID}}<code>{{slice .App.ContainerID 0 12}}</code>{{else}}<span class="text-muted">NONE</span>{{end}}</dd>
-                        <dt>NETWORK</dt><dd><code>{{if .App.NetworkName}}{{.App.NetworkName}}{{else}}liteploy-net{{end}}</code></dd>
+                        <dt>NETWORK</dt><dd><code>{{if .App.NetworkName}}{{.App.NetworkName}}{{else}}liteploy-network{{end}}</code></dd>
                         <dt>CREATED</dt><dd style="font-family:var(--font-mono)">{{formatTime .App.CreatedAt}}</dd>
                         <dt>UPDATED</dt><dd style="font-family:var(--font-mono)">{{formatTime .App.UpdatedAt}}</dd>
                     </dl>
@@ -249,6 +261,17 @@
                 </div>
             </div>
 
+            {{if or (eq .App.ServiceType "worker") (eq .App.ServiceType "internal")}}
+            <div class="info-box mb-3" style="background: rgba(235, 111, 146, 0.1); border-left: 3px solid var(--rp-love); color: var(--rp-text); padding: 0.8rem;">
+                <strong style="color: var(--rp-love);">[ PRIVATE SERVICE — NO PUBLIC ROUTING ]</strong><br>
+                This service role is configured as <strong>{{.App.ServiceType}}</strong>. Ingress domains and public reverse proxy routing are disabled by policy.
+                {{if eq .App.ServiceType "internal"}}
+                <br>Internal services are reachable privately within their Project network at <code>liteploy-app-{{.App.ID}}</code> or <code>{{.App.Name}}</code>.
+                {{else}}
+                <br>Background workers run without listening for inbound HTTP requests.
+                {{end}}
+            </div>
+            {{else}}
             {{if .Settings.PrimaryDomain}}
             <div class="info-box mb-3" style="font-size: 0.85rem; padding: 0.6rem 0.8rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem;">
                 <div>
@@ -271,6 +294,7 @@
                 </div>
                 <button type="submit" class="btn btn-secondary">[ + ADD ROUTE ]</button>
             </form>
+            {{end}}
 
             {{if .App.Domains}}
             <table class="table" role="table">
@@ -289,7 +313,7 @@
                             <strong class="domain-title">{{.}}</strong>
                             <a href="http://{{.}}" target="_blank" rel="noopener noreferrer" class="text-xs ml-1 text-muted">↗</a>
                         </td>
-                        <td><code class="code-sm">liteploy-{{$.App.ID}}:{{$.App.Port}}</code></td>
+                        <td><code class="code-sm">liteploy-app-{{$.App.ID}}:{{$.App.Port}}</code></td>
                         <td>
                             <button type="button" class="btn btn-sm btn-secondary" onclick="checkDomainDNS(this, '{{.}}')"
                                 aria-label="Check DNS for {{.}}">◎ TEST DNS</button>
@@ -484,6 +508,7 @@
             </div>
         </section>
     </main>
+    </div>
 
     <script>
     function toggleSecretVisibility(inputId, btn) {
