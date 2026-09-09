@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/liteploy/liteploy/internal/docker"
@@ -91,6 +92,22 @@ func (s *Server) handleDeploymentSSE(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// writeSSEData formats multiline text in compliant SSE data format (each line prefixed with "data: ").
+func writeSSEData(w io.Writer, text string) {
+	lines := strings.Split(text, "\n")
+	hasLine := false
+	for _, l := range lines {
+		trimmed := strings.TrimRight(l, "\r")
+		if trimmed != "" {
+			fmt.Fprintf(w, "data: %s\n", trimmed)
+			hasLine = true
+		}
+	}
+	if hasLine {
+		fmt.Fprint(w, "\n")
+	}
+}
+
 // streamLogSSE streams the full build log to the SSE connection.
 func (s *Server) streamLogSSE(w io.Writer, flusher http.Flusher, deploymentID string) {
 	s.streamLogSSEFrom(w, flusher, deploymentID, 0)
@@ -103,7 +120,7 @@ func (s *Server) streamLogSSEFrom(w io.Writer, flusher http.Flusher, deploymentI
 		return newOffset, err
 	}
 
-	fmt.Fprintf(w, "data: %s\n\n", string(chunk))
+	writeSSEData(w, string(chunk))
 	flusher.Flush()
 	return newOffset, nil
 }
@@ -157,8 +174,7 @@ func (s *Server) handleContainerLogStream(w http.ResponseWriter, r *http.Request
 	for {
 		n, err := pr.Read(buf)
 		if n > 0 {
-			line := string(buf[:n])
-			fmt.Fprintf(w, "data: %s\n\n", line)
+			writeSSEData(w, string(buf[:n]))
 			flusher.Flush()
 		}
 		if err != nil {
