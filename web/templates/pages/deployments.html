@@ -48,7 +48,7 @@
                             </td>
                             <td>
                                 <a href="/applications/{{.AppID}}" class="app-link">
-                                    {{index $.AppNames .AppID}} <span class="text-muted text-xs">({{.AppID}})</span>
+                                    {{if $.AppNames}}{{index $.AppNames .AppID}}{{else}}{{.AppID}}{{end}} <span class="text-muted text-xs">({{.AppID}})</span>
                                 </a>
                             </td>
                             <td><span class="status-badge status-{{.Status}}">{{.Status}}</span></td>

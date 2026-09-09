@@ -39,7 +39,7 @@
                         <span class="metric-card-label">APPLICATIONS</span>
                         <span class="metric-card-chevron">&gt;</span>
                     </div>
-                    <div class="metric-card-count">{{len .Apps}}</div>
+                    <div class="metric-card-count">{{if .Apps}}{{len .Apps}}{{else}}0{{end}}</div>
                     <div class="metric-card-subtext">{{countRunning .Apps}} running &bull; {{countStopped .Apps}} stopped</div>
                 </a>
 
@@ -50,7 +50,7 @@
                         <span class="metric-card-label">DEPLOYMENTS</span>
                         <span class="metric-card-chevron">&gt;</span>
                     </div>
-                    <div class="metric-card-count">{{len .Deployments}}</div>
+                    <div class="metric-card-count">{{if .Deployments}}{{len .Deployments}}{{else}}0{{end}}</div>
                     <div class="metric-card-subtext">{{countDeploying .Deployments}} running &bull; {{countCompleted .Deployments}} completed</div>
                 </a>
 
@@ -103,7 +103,10 @@
                         </thead>
                         <tbody>
                             {{range .Deployments}}
-                            {{$app := index $.AppMap .AppID}}
+                            {{$app := ""}}
+                            {{if $.AppMap}}
+                                {{$app = index $.AppMap .AppID}}
+                            {{end}}
                             <tr>
                                 <td>
                                     <div class="app-identity-cell">
