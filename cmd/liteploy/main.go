@@ -288,6 +288,9 @@ func handleCLI(cmd string, args []string) {
 	case "deploy":
 		runCLIDeploy(args)
 		os.Exit(0)
+	case "reset-password":
+		runCLIResetPassword(args)
+		os.Exit(0)
 	case "run":
 		// Normal server run
 		return
@@ -310,6 +313,7 @@ Commands:
   status [app-id]      Show status of all applications or a specific application
   deploy <app-id>      Trigger deployment for an application
   logs <app-id>        View latest build and deployment logs for an application
+  reset-password <usr> Reset admin user password from server CLI
   version              Print version and exit
   help                 Show this help text
 
@@ -469,5 +473,37 @@ func runCLILogs(args []string) {
 	latest := deps[0]
 	fmt.Printf("=== Latest Deployment #%s (%s) ===\n", latest.ID, latest.Status)
 	_ = depSvc.StreamBuildLog(latest.ID, os.Stdout)
+}
+
+func runCLIResetPassword(args []string) {
+	if len(args) < 2 {
+		fmt.Fprintf(os.Stderr, "Usage: liteploy reset-password <username> <new-password>\n")
+		os.Exit(1)
+	}
+	username := args[0]
+	newPassword := args[1]
+
+	cfg, err := config.Load()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
+		os.Exit(1)
+	}
+	store, err := storage.New(cfg.DataDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error loading storage: %v\n", err)
+		os.Exit(1)
+	}
+	userStore, err := auth.NewUserStore(store, nil)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error loading user store: %v\n", err)
+		os.Exit(1)
+	}
+
+	if err := userStore.ResetPassword(username, newPassword); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("[OK] Successfully updated password for user %q\n", username)
 }
 

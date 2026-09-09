@@ -137,6 +137,31 @@ func (us *UserStore) ChangePassword(username, oldPassword, newPassword string) e
 	return us.save()
 }
 
+// ResetPassword sets a new password without requiring the old password.
+// Designed for administrative server recovery via CLI.
+func (us *UserStore) ResetPassword(username, newPassword string) error {
+	if len(newPassword) < 6 {
+		return errors.New("password must be at least 6 characters")
+	}
+
+	us.mu.Lock()
+	defer us.mu.Unlock()
+
+	user, ok := us.users[username]
+	if !ok {
+		return errors.New("user not found")
+	}
+
+	hash, err := HashPassword(newPassword)
+	if err != nil {
+		return err
+	}
+
+	user.PasswordHash = hash
+	user.UpdatedAt = time.Now().UTC()
+	return us.save()
+}
+
 // save persists the user list atomically. Called with mu held.
 func (us *UserStore) save() error {
 	list := make([]*User, 0, len(us.users))

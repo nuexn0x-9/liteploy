@@ -5,6 +5,8 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/liteploy/liteploy/internal/storage"
 )
 
 var testSecret = []byte("aaaabbbbccccddddeeeeffffgggghhhh") // 32 bytes
@@ -140,3 +142,37 @@ func TestShortSecret(t *testing.T) {
 		t.Error("NewService should fail with short secret")
 	}
 }
+
+func TestUserStore_ResetPassword(t *testing.T) {
+	dir := t.TempDir()
+	store, _ := storage.New(dir)
+	us, err := NewUserStore(store, nil)
+	if err != nil {
+		t.Fatalf("NewUserStore: %v", err)
+	}
+
+	// Create admin
+	if err := us.CreateAdmin("admin", "originalPass123"); err != nil {
+		t.Fatalf("CreateAdmin: %v", err)
+	}
+
+	// Reset password directly
+	if err := us.ResetPassword("admin", "newSecretPass999"); err != nil {
+		t.Fatalf("ResetPassword: %v", err)
+	}
+
+	// Verify old password fails
+	if _, err := us.Authenticate("admin", "originalPass123"); err == nil {
+		t.Error("old password should fail after reset")
+	}
+
+	// Verify new password succeeds
+	u, err := us.Authenticate("admin", "newSecretPass999")
+	if err != nil {
+		t.Fatalf("new password should succeed: %v", err)
+	}
+	if u.Username != "admin" {
+		t.Errorf("expected username admin, got %q", u.Username)
+	}
+}
+
