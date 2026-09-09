@@ -193,12 +193,106 @@ sudo systemctl status liteploy
 # View live system logs
 sudo journalctl -u liteploy -f
 
+# CLI management
+liteploy status
+liteploy deploy <app-id>
+liteploy logs <app-id>
+liteploy reset-password <username> <new-password>
+
 # Restart LITEPLOY
 sudo systemctl restart liteploy
 
 # Stop LITEPLOY
 sudo systemctl stop liteploy
 ```
+
+---
+
+## 🔐 Credentials, Password Management & Hardened Setup Guide
+
+### 1. The Environment File (`/etc/liteploy/liteploy.env`)
+
+On a Linux VPS, LITEPLOY loads its platform configuration from:
+```text
+/etc/liteploy/liteploy.env
+```
+This file is generated with strict permissions: **`chmod 600`** (readable/writable exclusively by `root`) inside directory `/etc/liteploy` (`chmod 700`).
+
+```ini
+LITEPLOY_ADDR=:8080
+LITEPLOY_DATA_DIR=/var/lib/liteploy/data
+LITEPLOY_CADDY_ADMIN=http://127.0.0.1:2019
+LITEPLOY_SESSION_SECRET=e7b41f8... # Cryptographically generated 32+ bytes
+LITEPLOY_LOG_LEVEL=info
+LITEPLOY_LOG_JSON=true
+```
+
+> [!IMPORTANT]
+> **Why the admin password is NOT in `.env`:**  
+> Storing administrative passwords in environment files is a critical vulnerability—passwords can easily leak to sub-processes, crash traces, or process inspection tools (`/proc/*/environ`). LITEPLOY intentionally isolates credentials in an encrypted user store.
+
+---
+
+### 2. Initial Password Setup (First-Run Wizard)
+
+1. On a fresh installation, no user account exists (`/var/lib/liteploy/data/config/users.json` is empty).
+2. When accessing the server URL (`:8080`), LITEPLOY automatically routes you to the **Initial Setup Wizard** (`/setup`).
+3. You set your custom administrative `username` and `password`.
+4. The password is immediately hashed with **bcrypt (cost 12)** and written to persistent storage. Plaintext passwords are never logged or stored on disk.
+5. **Permanent Lockdown:** Once created, the `/setup` endpoint is permanently locked. Any subsequent visit is automatically redirected to `/login`.
+
+---
+
+### 3. Changing & Resetting Passwords
+
+#### Method A: Normal Change (Via Web Dashboard)
+1. Log in and navigate to **Settings** (`/settings`).
+2. Under **Admin Password**, enter your current password and your new password.
+3. Protected with **CSRF tokens** and current password hash verification.
+
+#### Method B: Emergency Recovery (Via Server Terminal)
+If you forget your administrator password and cannot log in:
+```bash
+sudo liteploy reset-password admin YourNewSecurePassword123!
+```
+*Alternatively, delete the user configuration to re-trigger the initial setup wizard:*
+```bash
+sudo rm /var/lib/liteploy/data/config/users.json
+sudo systemctl restart liteploy
+```
+*(Requires host SSH access, ensuring only verified server operators can perform recovery).*
+
+---
+
+### 4. Hardened Security Scenario (Step-by-Step Best Practice)
+
+Follow this deployment procedure to achieve maximum security on a public VPS:
+
+#### Step 1: Claim Initial Setup via SSH Port Forwarding
+Prevent automated internet scanners from accessing the unauthenticated `/setup` wizard over public IP:
+```bash
+# On your local computer, open an encrypted SSH tunnel:
+ssh -L 8080:localhost:8080 root@YOUR_VPS_IP
+```
+Then navigate to `http://localhost:8080/setup` in your local browser to safely claim the admin account.
+
+#### Step 2: Configure Primary Domain & Automatic HTTPS
+In **Setup Wizard Step 2**, configure your domain (e.g. `liteploy.example.com`) and point DNS A records to your VPS IP. Caddy will automatically provision Let's Encrypt TLS certificates. All login credentials and session cookies are now encrypted via HTTPS.
+
+#### Step 3: Lock Host Firewall
+Once Caddy reverse proxy is handling HTTPS traffic, close port 8080 to the public internet:
+```bash
+# Allow only SSH, HTTP, and HTTPS
+sudo ufw allow 22/tcp
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+sudo ufw enable
+```
+Port 8080 (LITEPLOY core) and port 2019 (Caddy admin API) remain accessible locally while completely hidden from external scanners.
+
+#### Step 4: Password Complexity
+- Use passwords with 14+ characters combining uppercase, lowercase, numbers, and symbols.
+- Store credentials in an encrypted password manager.
 
 ---
 
